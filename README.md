@@ -23,6 +23,7 @@
 - [功能对比](#功能对比)
 - [环境要求](#环境要求)
 - [安装](#安装)
+- [给使用者的安装说明](docs/USER-GUIDE.md)
 - [用 GitHub Desktop 发布](docs/GITHUB-DESKTOP.md)
 - [使用](#使用)
 - [在线版连接 LCU](#在线版连接-lcu)
@@ -132,6 +133,10 @@ D:\DSH\aramkit-dsh-plugins\packages\aramkit-live
 - **海斗助手在线版**（带绿点）
 
 如果只看到一个，检查终端输出里是否有安装错误。
+
+### 把安装说明发给别人
+
+可以直接把 [docs/USER-GUIDE.md](docs/USER-GUIDE.md) 发给使用者；它是不需要改代码的纯安装/使用说明。
 
 ### 用 GitHub Desktop 发布
 
