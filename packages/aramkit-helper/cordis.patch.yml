@@ -1,0 +1,3 @@
+- insert:
+    - id: aramkit-helper
+      name: '@local/aramkit-helper'

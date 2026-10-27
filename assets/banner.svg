@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-label="海斗助手 DSH 插件">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#080d13"/>
+      <stop offset="0.55" stop-color="#0d1720"/>
+      <stop offset="1" stop-color="#111b25"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f5d795"/>
+      <stop offset="1" stop-color="#a97a31"/>
+    </linearGradient>
+    <linearGradient id="teal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6ff3dd"/>
+      <stop offset="1" stop-color="#126f91"/>
+    </linearGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#ffffff" stroke-opacity="0.035"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="320" fill="url(#bg)"/>
+  <rect width="1200" height="320" fill="url(#grid)"/>
+  <circle cx="1060" cy="40" r="220" fill="#5ee0cf" opacity="0.06"/>
+  <circle cx="1080" cy="40" r="150" fill="#5ee0cf" opacity="0.05"/>
+  <path d="M96 76 160 113v74l-64 37-64-37v-74Z" fill="#111c26" stroke="url(#gold)" stroke-width="4"/>
+  <path d="M96 102 136 125v38l-40 23-40-23v-38Z" fill="url(#teal)" opacity="0.95"/>
+  <path d="M96 122v44M76 137l40 20M116 137l-40 20" stroke="#08131a" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="148" cy="64" r="9" fill="#5ee0cf" stroke="#0b1118" stroke-width="4"/>
+  <text x="188" y="142" fill="#f2f6fa" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="54" font-weight="700" letter-spacing="-1">海斗助手</text>
+  <text x="190" y="184" fill="#95a3b4" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="21">ARAM Mayhem helper for DeepSeek Harness</text>
+  <g font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="600">
+    <rect x="190" y="214" width="116" height="36" rx="18" fill="#5ee0cf" opacity="0.12" stroke="#5ee0cf" stroke-opacity="0.4"/>
+    <text x="248" y="238" text-anchor="middle" fill="#8df5e7">隔离版</text>
+    <rect x="320" y="214" width="130" height="36" rx="18" fill="#d9b56a" opacity="0.12" stroke="#d9b56a" stroke-opacity="0.45"/>
+    <text x="385" y="238" text-anchor="middle" fill="#e8c784">在线版 · LCU</text>
+    <rect x="464" y="214" width="150" height="36" rx="18" fill="#ffffff" opacity="0.05" stroke="#ffffff" stroke-opacity="0.14"/>
+    <text x="539" y="238" text-anchor="middle" fill="#aeb8c4">ARAMKit 数据</text>
+  </g>
+  <text x="190" y="285" fill="#647184" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="13">Not affiliated with Riot Games or ARAMKit</text>
+</svg>

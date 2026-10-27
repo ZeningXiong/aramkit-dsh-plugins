@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="ARAM Helper Online">
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f5d795"/>
+      <stop offset="1" stop-color="#a97a31"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6ff3dd"/>
+      <stop offset="1" stop-color="#126f91"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="#10161d"/>
+  <path d="M64 10 108 35v48L64 118 20 83V35Z" fill="#18222d" stroke="url(#gold)" stroke-width="4"/>
+  <path d="M64 27 94 44v30L64 101 34 74V44Z" fill="url(#blue)" opacity="0.94"/>
+  <path d="M64 40v40M48 54l32 16M80 54 48 70" stroke="#08131a" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="64" cy="64" r="7" fill="#f7e2b0"/>
+  <circle cx="98" cy="30" r="9" fill="#5ee0cf" stroke="#10161d" stroke-width="3"/>
+</svg>

@@ -1,0 +1,9 @@
+node_modules/
+*.log
+lockfile
+**/lockfile
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.local

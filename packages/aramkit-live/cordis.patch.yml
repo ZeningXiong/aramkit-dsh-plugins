@@ -1,0 +1,3 @@
+- insert:
+    - id: aramkit-live
+      name: '@local/aramkit-live'
