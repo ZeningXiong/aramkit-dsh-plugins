@@ -65,6 +65,7 @@ window.__ModuleLoader__.load({
       skills: '技能加点',
       augments: '海克斯推荐',
       augmentHint: '按品质 · 默认前 3，展开看前 15',
+      augmentCombo: '海克斯组合',
       top3Short: '前 3 名',
       top15Short: '前 15 名',
       expandTop15: '展开该品质前 15 名',
@@ -143,6 +144,7 @@ window.__ModuleLoader__.load({
       skills: 'Skill order',
       augments: 'Augments',
       augmentHint: 'By rarity · top 3, expand for top 15',
+      augmentCombo: 'Augment pairs',
       top3Short: 'Top 3',
       top15Short: 'Top 15',
       expandTop15: 'Show the top 15 of this rarity',
@@ -476,6 +478,11 @@ radial-gradient(900px 420px at 95% 0%, rgba(216,180,106,.07), transparent 70%),
 .ak-skill-order{font-size:17px;font-weight:800;letter-spacing:.4px;font-variant-numeric:tabular-nums}
 .ak-skill-meta{margin-left:auto;text-align:right;font-size:10px;color:var(--dsw-alias-label-secondary);line-height:1.5}
 .ak-skill-meta b{color:var(--dsw-alias-label-primary);display:block;font-size:12px}
+.ak-arch-tabs{display:flex;gap:3px;padding:3px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base);border-radius:9px;width:fit-content;max-width:100%;overflow:auto;margin-bottom:10px}
+.ak-arch-tab{appearance:none;border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;font-weight:650;height:28px;padding:0 10px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.ak-arch-tab:hover{color:var(--dsw-alias-label-primary)}
+.ak-arch-tab.active{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 14%,var(--dsw-alias-bg-layer-1));color:var(--dsw-alias-label-primary);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--dsw-alias-brand-primary) 22%,transparent)}
+.ak-arch-tab span{font-size:9px;color:var(--dsw-alias-label-secondary)}
 .ak-rarity-tabs{display:flex;gap:4px;padding:4px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base);border-radius:11px;width:fit-content;margin-bottom:11px;max-width:100%;overflow:auto}
 .ak-rarity-tab{appearance:none;border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;font-weight:650;height:34px;padding:0 14px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;white-space:nowrap;transition:background .15s,color .15s,box-shadow .15s}
 .ak-rarity-tab:hover{color:var(--dsw-alias-label-primary);background:color-mix(in srgb,var(--dsw-alias-brand-primary) 7%,transparent)}
@@ -504,6 +511,10 @@ radial-gradient(900px 420px at 95% 0%, rgba(216,180,106,.07), transparent 70%),
 .ak-dot.gold{background:#e0b25c}
 .ak-dot.silver{background:#aeb8c4}
 .ak-aug-win{font-size:14px;font-weight:750;color:var(--dsw-alias-label-primary);margin-left:auto;white-space:nowrap}
+.ak-combos{margin-top:10px;padding-top:9px;border-top:1px solid var(--dsw-alias-border-l1)}
+.ak-combo{display:flex;align-items:center;gap:6px;padding:5px 0;font-size:11px}
+.ak-combo img{width:24px;height:24px;border-radius:5px;object-fit:cover}
+.ak-combo span{margin-left:auto;font-weight:750;color:var(--dsw-alias-label-primary)}
 .ak-skeleton{height:13px;border-radius:6px;background:linear-gradient(90deg,var(--dsw-alias-bg-layer-2),color-mix(in srgb,var(--dsw-alias-brand-primary) 9%,var(--dsw-alias-bg-layer-2)),var(--dsw-alias-bg-layer-2));background-size:200% 100%;animation:ak-shimmer 1.2s linear infinite}
 @keyframes ak-shimmer{to{background-position:-200% 0}}
 .ak-loading{border:1px solid var(--dsw-alias-border-l1);border-radius:16px;padding:28px;background:var(--dsw-alias-bg-layer-1)}
@@ -900,6 +911,7 @@ radial-gradient(900px 420px at 95% 0%, rgba(216,180,106,.07), transparent 70%),
       const [error, setError] = useState('')
       const [expanded, setExpanded] = useState({})
       const [activeRarity, setActiveRarity] = useState('prismatic')
+      const [archetypeKey, setArchetypeKey] = useState(null)
       const [dataset, setDataset] = useState(() => {
         try {
           return localStorage.getItem('aramkit.dataset') === 'high' ? 'high' : 'all'
@@ -962,6 +974,10 @@ radial-gradient(900px 420px at 95% 0%, rgba(216,180,106,.07), transparent 70%),
       }, [selectedId, dataset, load])
 
       useEffect(() => {
+        setArchetypeKey(data?.archetypes?.[0]?.key ?? null)
+      }, [data?.champion?.id, data?.dataset])
+
+      useEffect(() => {
         if (!open) return
         const close = (event) => {
           if (!searchRef.current?.contains(event.target)) setOpen(false)
@@ -982,7 +998,9 @@ radial-gradient(900px 420px at 95% 0%, rgba(216,180,106,.07), transparent 70%),
       }
 
       const champion = data?.champion || selected
-      const builds = data?.builds || []
+      const archetypes = data?.archetypes || []
+      const activeArchetype = archetypes.find((row) => row.key === archetypeKey) || archetypes[0] || null
+      const builds = activeArchetype?.builds || data?.builds || []
       const primary = builds[0]
       const starters = primary?.starters?.[0]
       const boots = primary?.boots?.[0]
@@ -1153,6 +1171,25 @@ radial-gradient(900px 420px at 95% 0%, rgba(216,180,106,.07), transparent 70%),
                       'section',
                       { className: 'ak-panel' },
                       h('h3', null, t('builds'), h('span', { className: 'ak-hint' }, `${t('winRate')} ${pct(primary?.winRate)}`)),
+                      archetypes.length > 1
+                        ? h('div', { className: 'ak-arch-tabs' },
+                            archetypes.map((row) =>
+                              h('button', {
+                                key: row.key,
+                                type: 'button',
+                                className: `ak-arch-tab${activeArchetype?.key === row.key ? ' active' : ''}`,
+                                title: `${row.label} · ${t('winRate')} ${pct(row.winRate)}`,
+                                onClick: () => {
+                                  setArchetypeKey(row.key)
+                                  setExpanded({})
+                                },
+                              },
+                                row.label,
+                                h('span', null, pct(row.winRate)),
+                              ),
+                            ),
+                          )
+                        : null,
                       starters
                         ? h(
                             'div',
@@ -1384,6 +1421,17 @@ radial-gradient(900px 420px at 95% 0%, rgba(216,180,106,.07), transparent 70%),
                           : h('div', { className: 'ak-aug-sub', style: { padding: '16px 14px' } }, t('noData')),
                       )
                     })(),
+                    data?.augmentCombinations?.length
+                      ? h('div', { className: 'ak-combos' },
+                          h('div', { className: 'ak-label' }, t('augmentCombo')),
+                          data.augmentCombinations.slice(0, 2).map((combo, index) =>
+                            h('div', { className: 'ak-combo', key: index },
+                              combo.augments.map((row) => h(Img, { key: row.id, src: row.icon, alt: row.name, size: 24 })),
+                              h('span', null, pct(combo.winRate)),
+                            ),
+                          ),
+                        )
+                      : null,
                   ),
                   h(
                     'div',

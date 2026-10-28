@@ -73,13 +73,14 @@ export async function getResources() {
   if (cached && Date.now() - cached.at < RESOURCE_TTL) return cached.value
 
   const base = `${DATA_ORIGIN}/${version.resourcePath}/zh-CN/resources`
-  const [champions, augments, items, spells] = await Promise.all([
+  const [champions, augments, items, spells, archetypes] = await Promise.all([
     fetchJson(`${base}/champions.json`),
     fetchJson(`${base}/augments.json`),
     fetchJson(`${base}/items.json`),
     fetchJson(`${base}/summoner-spells.json`),
+    fetchJson(`${base}/archetypes.json`),
   ])
-  const value = { champions, augments, items, spells, version }
+  const value = { champions, augments, items, spells, archetypes, version }
   resourcesCache.set(key, { at: Date.now(), value })
   return value
 }
@@ -220,6 +221,70 @@ function compactBuilds(resources, detail) {
   return chosen.map((profile) => compactBuild(resources, profile))
 }
 
+function compactArchetypes(resources, detail) {
+  const source = detail.builds?.filtered?.archetypes?.length
+    ? detail.builds.filtered
+    : detail.builds?.unfiltered?.archetypes?.length
+      ? detail.builds.unfiltered
+      : detail.builds
+  const result = []
+  for (const archetype of source?.archetypes ?? []) {
+    const profiles = (archetype.profiles ?? [])
+      .filter(
+        (profile) =>
+          profile &&
+          Array.isArray(profile.itemSet) &&
+          profile.itemSet.length > 0 &&
+          (profile.sampleCount ?? 0) >= MIN_BUILD_SAMPLE,
+      )
+      .sort((a, b) => (b.winRate ?? 0) - (a.winRate ?? 0) || (b.sampleCount ?? 0) - (a.sampleCount ?? 0))
+    const seen = new Set()
+    const builds = []
+    for (const profile of profiles) {
+      const key = profile.itemSet.map((row) => row.id).join('-')
+      if (seen.has(key)) continue
+      seen.add(key)
+      builds.push(compactBuild(resources, profile))
+      if (builds.length >= 3) break
+    }
+    if (!builds.length) continue
+    result.push({
+      key: archetype.key,
+      label: resources.archetypes?.[archetype.key]?.name || archetype.key,
+      rank: archetype.rank,
+      winRate: archetype.winRate,
+      pickRate: archetype.pickRate,
+      sampleCount: archetype.sampleCount,
+      builds,
+    })
+  }
+  result.sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999))
+  return result
+}
+
+function augmentMetaRef(resources, id) {
+  const meta = resources.augments?.[String(id)]
+  return {
+    id: Number(id),
+    name: meta?.name ?? String(id),
+    icon: asset(meta?.icon),
+    rarity: meta?.rarity ?? 'silver',
+    rarityLabel: RARITY_LABEL[meta?.rarity] ?? '白银',
+  }
+}
+
+function compactAugmentCombinations(resources, detail) {
+  return (detail.augmentCombinations ?? [])
+    .filter((row) => (row.sampleCount ?? 0) >= 200)
+    .slice(0, 5)
+    .map((row) => ({
+      augments: (row.augmentIds ?? []).map((id) => augmentMetaRef(resources, id)),
+      winRate: row.winRate,
+      pickRate: row.pickRate,
+      sampleCount: row.sampleCount,
+    }))
+}
+
 function compactAugments(resources, detail) {
   const groups = { prismatic: [], gold: [], silver: [] }
   for (const row of detail.augments?.all ?? []) {
@@ -290,6 +355,8 @@ export async function buildChampionPayload(id, datasetArg = 'all') {
       sampleCount: stats.sampleCount ?? rank.sampleCount ?? null,
     },
     builds: compactBuilds(resources, detail),
+    archetypes: compactArchetypes(resources, detail),
+    augmentCombinations: compactAugmentCombinations(resources, detail),
     summoners: compactSummoners(resources, detail),
     skills: compactSkills(detail),
     augments: compactAugments(resources, detail),

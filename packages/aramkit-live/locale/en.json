@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "ARAM Helper Online",
-    "description": "Connects to the League Client LCU: available champions, teammate hidden MMR, current-champion recommendations, and an AI post-game review of your five allies."
+    "description": "Connects to the League Client LCU: available champions, teammate hidden MMR, current-champion recommendations, your own in-game build, and an optional AI post-game review with styles and custom corpus."
   }
 }

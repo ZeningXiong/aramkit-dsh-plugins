@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "ARAM Helper (Isolated)",
-    "description": "Isolated edition: read teammate hidden MMR, switch between all-rank and high-MMR item paths, summoner spells, and the top three prismatic/gold/silver augments, expandable to the top 15 of each rarity."
+    "description": "Isolated edition: teammate hidden MMR, all-rank/high-MMR builds, crit/bruiser/on-hit archetypes, summoner spells, top augments and augment pairs."
   }
 }

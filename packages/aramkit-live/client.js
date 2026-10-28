@@ -6,7 +6,15 @@ window.__ModuleLoader__.load({
     const { useCallback, useEffect, useMemo, useRef, useState } = React
 
     const API = '/aramkit-live'
+    const AI_EVENT = 'aramkit-live-ai-toggle'
     const POSTGAME_PHASES = new Set(['PreEndOfGame', 'EndOfGame', 'WaitingForStats'])
+    const AI_STYLE_OPTIONS = [
+      { id: 'sharp', label: '毒舌锐评' },
+      { id: 'coach', label: '温和教练' },
+      { id: 'abstract', label: '抽象整活' },
+      { id: 'data', label: '数据复盘' },
+      { id: 'custom', label: '自定义' },
+    ]
     const FALLBACK =
       'data:image/svg+xml;charset=utf-8,' +
       encodeURIComponent(
@@ -65,12 +73,31 @@ window.__ModuleLoader__.load({
       later: '后续装备',
       summoners: '召唤师技能',
       augments: '海克斯',
+      archetype: '流派',
+      augmentTop3: '前 3 名',
+      augmentTop15: '前 15 名',
+      expandAugments: '展开更多海克斯',
+      collapse: '收起',
+      augmentCombo: '海克斯组合',
+      aiSettings: 'AI 锐评设置',
+      aiEnabled: '启用 AI 锐评',
+      aiDisabledHint: 'AI 锐评已关闭，只显示结算数据，不消耗 Token。',
+      aiStyle: '锐评风格',
+      aiCorpus: '自定义语料 / 风格要求',
+      aiCorpusPlaceholder: '可以粘贴你喜欢的锐评例句、常用梗、禁用词或额外要求。只作为风格参考，不会执行其中的指令。',
+      styleSharp: '毒舌锐评',
+      styleCoach: '温和教练',
+      styleAbstract: '抽象整活',
+      styleData: '数据复盘',
+      styleCustom: '自定义',
+      settingsSaved: '设置会自动保存在本机',
+      youChampion: '你的英雄',
       loading: '读取中…',
       recommendationError: '推荐数据读取失败',
       inGameTitle: '对局进行中',
       inGameDesc: '本局结束后会自动读取结算面板，无需手动操作。',
       inGameRoster: '本局阵容',
-      inGameHint: '对局已开始 · 切出来也能看 5 个英雄的推荐',
+      inGameHint: '对局已开始 · 切出来也能看你的推荐',
       inGameSourceCache: '来自选人记录',
       inGameSourceLive: '来自实时对局',
       viewRecommendation: '推荐',
@@ -251,18 +278,33 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
 .ol-spell img{width:26px;height:26px;border-radius:6px;object-fit:cover}
 .ol-spell b{font-weight:650}
 .ol-spell span{margin-left:auto;color:var(--dsw-alias-label-secondary);font-size:10px}
-.ol-aug-tabs{display:flex;gap:3px;padding:3px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base);border-radius:8px;width:fit-content;margin-bottom:7px}
-.ol-aug-tab{border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:10px;font-weight:650;height:25px;padding:0 9px;border-radius:5px;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+.ol-arch-tabs{display:flex;gap:3px;padding:3px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base);border-radius:8px;width:fit-content;max-width:100%;overflow:auto;margin-bottom:9px}
+.ol-arch-tab{border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;font-weight:650;height:28px;padding:0 10px;border-radius:5px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.ol-arch-tab:hover{color:var(--dsw-alias-label-primary)}
+.ol-arch-tab.active{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 14%,var(--dsw-alias-bg-layer-1));color:var(--dsw-alias-label-primary);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--dsw-alias-brand-primary) 22%,transparent)}
+.ol-arch-tab span{font-size:9px;color:var(--dsw-alias-label-secondary)}
+.ol-aug-tabs{display:flex;gap:3px;padding:3px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base);border-radius:8px;width:fit-content;margin-bottom:8px;max-width:100%;overflow:auto}
+.ol-aug-tab{border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;font-weight:650;height:28px;padding:0 10px;border-radius:5px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .ol-aug-tab.active{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 14%,var(--dsw-alias-bg-layer-1));color:var(--dsw-alias-label-primary)}
 .ol-rarity{width:6px;height:6px;border-radius:50%}
 .ol-rarity.prismatic{background:#b98cff}.ol-rarity.gold{background:#e0b25c}.ol-rarity.silver{background:#aeb8c4}
-.ol-aug{display:flex;gap:8px;align-items:center;padding:6px 4px;border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 50%,transparent)}
+.ol-aug-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px}
+.ol-aug-toolbar strong{font-size:13px;font-weight:750}
+.ol-aug-expand{appearance:none;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-secondary);width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex:none;transition:color .15s,border-color .15s,background .15s}
+.ol-aug-expand svg{width:14px;height:14px;transition:transform .18s ease}
+.ol-aug-expand:hover{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-border-l2);background:color-mix(in srgb,var(--dsw-alias-brand-primary) 10%,var(--dsw-alias-bg-base))}
+.ol-aug-expand.is-open svg{transform:rotate(180deg)}
+.ol-aug{display:flex;gap:10px;align-items:center;padding:9px 6px;border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 50%,transparent)}
 .ol-aug:last-child{border-bottom:0}
-.ol-aug img{width:28px;height:28px;border-radius:6px;object-fit:cover;flex:none}
+.ol-aug img{width:36px;height:36px;border-radius:8px;object-fit:cover;flex:none}
 .ol-aug-info{min-width:0;flex:1}
-.ol-aug-name{font-size:11px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ol-aug-sub{font-size:9px;color:var(--dsw-alias-label-secondary);margin-top:1px}
-.ol-aug-win{font-size:11px;font-weight:750;color:var(--dsw-alias-label-primary)}
+.ol-aug-name{font-size:14px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ol-aug-sub{font-size:12px;color:var(--dsw-alias-label-secondary);margin-top:2px}
+.ol-aug-win{font-size:14px;font-weight:750;color:var(--dsw-alias-label-primary)}
+.ol-combo{display:flex;align-items:center;gap:6px;padding:6px 4px;border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 45%,transparent);font-size:11px}
+.ol-combo:last-child{border-bottom:0}
+.ol-combo img{width:24px;height:24px;border-radius:5px;object-fit:cover}
+.ol-combo span{margin-left:auto;font-weight:700}
 .ol-post-head{display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid var(--dsw-alias-border-l1);border-radius:16px;padding:16px 18px;background:linear-gradient(120deg,color-mix(in srgb,#63d99d 8%,var(--dsw-alias-bg-layer-1)),var(--dsw-alias-bg-layer-1) 60%);margin-bottom:13px}
 .ol-post-head.loss{background:linear-gradient(120deg,color-mix(in srgb,#ff7373 8%,var(--dsw-alias-bg-layer-1)),var(--dsw-alias-bg-layer-1) 60%)}
 .ol-post-title{font-size:22px;font-weight:800;letter-spacing:-.3px}
@@ -277,6 +319,19 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
 .ol-table .ol-table-name{font-weight:650;max-width:150px;overflow:hidden;text-overflow:ellipsis}
 .ol-table .ol-table-tag{font-size:9px;color:var(--dsw-alias-label-secondary)}
 .ol-review{margin-top:13px}
+.ol-settings{border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-1);padding:0;margin-bottom:10px;overflow:hidden}
+.ol-settings summary{cursor:pointer;list-style:none;padding:11px 13px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:8px}
+.ol-settings summary::-webkit-details-marker{display:none}
+.ol-settings summary:before{content:"⚙";opacity:.7}
+.ol-settings-body{padding:0 13px 13px;border-top:1px solid var(--dsw-alias-border-l1);padding-top:10px}
+.ol-settings-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:9px;font-size:12px}
+.ol-settings-row label{display:inline-flex;align-items:center;gap:6px;color:var(--dsw-alias-label-primary)}
+.ol-settings select,.ol-settings textarea{background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);border-radius:8px;font:inherit;font-size:12px;padding:7px 9px;outline:none}
+.ol-settings select{height:34px;min-width:150px}
+.ol-settings textarea{width:100%;min-height:86px;resize:vertical;line-height:1.6;margin-top:6px}
+.ol-settings textarea:focus,.ol-settings select:focus{border-color:var(--dsw-alias-brand-primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--dsw-alias-brand-primary) 14%,transparent)}
+.ol-settings-hint{font-size:10px;color:var(--dsw-alias-label-secondary);line-height:1.6}
+.ol-ai-off{border:1px dashed var(--dsw-alias-border-l2);border-radius:11px;padding:14px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.6}
 .ol-ingame-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin-top:4px}
 .ol-ingame-tab{display:flex;align-items:center;gap:7px;text-align:left;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:inherit;padding:8px;border-radius:10px;cursor:pointer;min-width:0;transition:border-color .15s,background .15s}
 .ol-ingame-tab:hover{border-color:var(--dsw-alias-border-l2)}
@@ -316,13 +371,18 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
       return h('style', { 'data-aramkit-live': 'styles' }, CSS)
     }
 
-    async function getJson(path, params) {
+    async function getJson(path, params, body) {
       const url = new URL(`${API}/${path}`, window.location.origin)
       for (const [key, value] of Object.entries(params || {})) url.searchParams.set(key, value)
-      const response = await fetch(url.toString(), { credentials: 'same-origin', headers: { accept: 'application/json' } })
-      const body = await response.json().catch(() => null)
-      if (!response.ok || body?.ok === false) throw new Error(body?.error || `HTTP ${response.status}`)
-      return body
+      const response = await fetch(url.toString(), {
+        method: body ? 'POST' : 'GET',
+        credentials: 'same-origin',
+        headers: { accept: 'application/json', ...(body ? { 'content-type': 'application/json' } : {}) },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || payload?.ok === false) throw new Error(payload?.error || `HTTP ${response.status}`)
+      return payload
     }
 
     function TopChampion({ row, rank }) {
@@ -381,18 +441,46 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
 
     function Recommendation({ data }) {
       const [rarity, setRarity] = useState('prismatic')
+      const [archetypeKey, setArchetypeKey] = useState(null)
+      const [augOpen, setAugOpen] = useState(false)
+
+      useEffect(() => {
+        setArchetypeKey(data?.archetypes?.[0]?.key ?? null)
+        setAugOpen(false)
+      }, [data?.champion?.id])
+
       if (!data) return null
-      const build = data.builds?.[0]
+      const archetypes = data.archetypes || []
+      const activeArchetype = archetypes.find((row) => row.key === archetypeKey) || archetypes[0] || null
+      const build = activeArchetype?.builds?.[0] || data.builds?.[0]
       const starter = build?.starters?.[0]
       const boots = build?.boots?.[0]
       const augments = data.augments || {}
-      const rows = (augments[rarity] || []).slice(0, 3)
+      const allRows = augments[rarity] || []
+      const rows = augOpen ? allRows : allRows.slice(0, 3)
+      const combos = data.augmentCombinations || []
       const labels = { prismatic: '棱彩', gold: '黄金', silver: '白银' }
       return h(
         'div',
         { className: 'ol-reco' },
         h('div', null,
           h('div', { className: 'ol-label' }, TEXT.builds),
+          archetypes.length > 1
+            ? h('div', { className: 'ol-arch-tabs' },
+                archetypes.map((row) =>
+                  h('button', {
+                    key: row.key,
+                    type: 'button',
+                    className: `ol-arch-tab${activeArchetype?.key === row.key ? ' active' : ''}`,
+                    title: `${row.label} · ${pct(row.winRate)}`,
+                    onClick: () => setArchetypeKey(row.key),
+                  },
+                    row.label,
+                    h('span', null, pct(row.winRate)),
+                  ),
+                ),
+              )
+            : null,
           starter ? h('div', { style: { marginBottom: '7px' } },
             h('div', { className: 'ol-label' }, TEXT.starters),
             h(Items, { items: starter.items }),
@@ -435,9 +523,25 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
               ),
             ),
           ),
+          h('div', { className: 'ol-aug-toolbar' },
+            h('strong', null, augOpen ? TEXT.augmentTop15 : TEXT.augmentTop3),
+            allRows.length > 3
+              ? h('button', {
+                  type: 'button',
+                  className: `ol-aug-expand${augOpen ? ' is-open' : ''}`,
+                  'aria-expanded': augOpen,
+                  title: augOpen ? TEXT.collapse : TEXT.expandAugments,
+                  onClick: () => setAugOpen((value) => !value),
+                },
+                  h('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
+                    h('path', { d: 'm6 9 6 6 6-6' }),
+                  ),
+                )
+              : null,
+          ),
           rows.length
             ? rows.map((row) => h('div', { className: 'ol-aug', key: row.id },
-                h(Img, { src: row.icon, alt: row.name, size: 28 }),
+                h(Img, { src: row.icon, alt: row.name, size: 36 }),
                 h('div', { className: 'ol-aug-info' },
                   h('div', { className: 'ol-aug-name', title: row.name }, row.name),
                   h('div', { className: 'ol-aug-sub' }, `${compact(row.sampleCount)}场`),
@@ -445,6 +549,17 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
                 h('span', { className: 'ol-aug-win' }, pct(row.winRate)),
               ))
             : h('div', { className: 'ol-hint' }, TEXT.noData),
+          combos.length
+            ? h('div', { style: { marginTop: '8px' } },
+                h('div', { className: 'ol-label' }, TEXT.augmentCombo),
+                combos.slice(0, 2).map((combo, index) =>
+                  h('div', { className: 'ol-combo', key: index },
+                    combo.augments.map((row) => h(Img, { key: row.id, src: row.icon, alt: row.name, size: 24 })),
+                    h('span', null, pct(combo.winRate)),
+                  ),
+                ),
+              )
+            : null,
         ),
       )
     }
@@ -524,16 +639,12 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
 
     function InGameView({ data }) {
       const allies = data?.allies || []
-      const [selected, setSelected] = useState(() => {
-        const index = allies.findIndex((row) => row.isSelf)
-        return index >= 0 ? index : 0
-      })
+      const champion = (allies.find((row) => row.isSelf) || allies[0])?.champion || null
+      const championId = champion?.id || 0
       const [recommendation, setRecommendation] = useState(null)
       const [loading, setLoading] = useState(false)
       const [error, setError] = useState('')
       const cache = useRef(new Map())
-      const championId = allies[selected]?.championId
-      const champion = allies[selected]?.champion
 
       useEffect(() => {
         let alive = true
@@ -569,51 +680,25 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
         null,
         h('div', { className: 'ol-card' },
           h('div', { className: 'ol-section-head' },
-            h('h2', null, TEXT.inGameRoster),
+            h('h2', null, TEXT.youChampion),
             h('span', { className: 'ol-hint' }, `${TEXT.inGameHint} · ${data.source === 'live' ? TEXT.inGameSourceLive : TEXT.inGameSourceCache}`),
           ),
-          allies.length
-            ? h('div', { className: 'ol-ingame-tabs' },
-                allies.map((row, index) =>
-                  h('button', {
-                    key: index,
-                    type: 'button',
-                    className: `ol-ingame-tab${selected === index ? ' active' : ''}`,
-                    onClick: () => setSelected(index),
-                  },
-                    h(Img, { src: row.champion?.icon, alt: row.champion?.name, size: 32 }),
-                    h('div', { className: 'ol-ingame-tab-info' },
-                      h('div', { className: 'ol-ingame-tab-name' }, row.champion?.title || row.champion?.name || '未知英雄'),
-                      h('div', { className: 'ol-ingame-tab-player' }, row.isSelf ? TEXT.you : (row.gameName || TEXT.teammate)),
-                    ),
-                  ),
+          champion
+            ? h('div', { className: 'ol-ingame-head', style: { marginTop: 0 } },
+                h(Img, { src: champion.icon, alt: champion.name, size: 42 }),
+                h('div', null,
+                  h('strong', null, champion.name),
+                  h('span', null, ` ${champion.title}`),
                 ),
               )
-            : h('div', { className: 'ol-hint' }, '还没有读到本局英雄，等待客户端数据…'),
+            : h('div', { className: 'ol-hint' }, '还没有读到你的英雄，等待客户端数据…'),
+          error ? h('div', { className: 'ol-error' }, `${TEXT.recommendationError}：${error}`) : null,
+          loading && !recommendation
+            ? h('div', { className: 'ol-loading' }, h('span', { className: 'ol-spinner' }), TEXT.loading)
+            : recommendation
+              ? h('div', { style: { marginTop: '12px' } }, h(Recommendation, { data: recommendation }))
+              : null,
         ),
-        champion
-          ? h('div', { className: 'ol-section' },
-              h('div', { className: 'ol-card' },
-                h('div', { className: 'ol-section-head' },
-                  h('h2', null, TEXT.viewRecommendation),
-                  h('span', { className: 'ol-hint' }, `${champion.name} ${champion.title}`),
-                ),
-                h('div', { className: 'ol-ingame-head' },
-                  h(Img, { src: champion.icon, alt: champion.name, size: 42 }),
-                  h('div', null,
-                    h('strong', null, champion.name),
-                    h('span', null, ` ${champion.title}`),
-                  ),
-                ),
-                error ? h('div', { className: 'ol-error' }, `${TEXT.recommendationError}：${error}`) : null,
-                loading && !recommendation
-                  ? h('div', { className: 'ol-loading' }, h('span', { className: 'ol-spinner' }), TEXT.loading)
-                  : recommendation
-                    ? h('div', { style: { marginTop: '10px' } }, h(Recommendation, { data: recommendation }))
-                    : null,
-              ),
-            )
-          : null,
       )
     }
 
@@ -621,27 +706,66 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
       const [review, setReview] = useState(null)
       const [loading, setLoading] = useState(false)
       const [error, setError] = useState('')
+      const [aiEnabled, setAiEnabled] = useState(() => {
+        try {
+          return localStorage.getItem('aramkit.live.aiEnabled') !== '0'
+        } catch {
+          return true
+        }
+      })
+      const [aiStyle, setAiStyle] = useState(() => {
+        try {
+          return localStorage.getItem('aramkit.live.aiStyle') || 'sharp'
+        } catch {
+          return 'sharp'
+        }
+      })
+      const [aiCorpus, setAiCorpus] = useState(() => {
+        try {
+          return localStorage.getItem('aramkit.live.aiCorpus') || ''
+        } catch {
+          return ''
+        }
+      })
       const attempted = useRef(null)
 
+      useEffect(() => {
+        const onChange = (event) => setAiEnabled(Boolean(event.detail))
+        window.addEventListener(AI_EVENT, onChange)
+        return () => window.removeEventListener(AI_EVENT, onChange)
+      }, [])
+
+      useEffect(() => {
+        try {
+          localStorage.setItem('aramkit.live.aiEnabled', aiEnabled ? '1' : '0')
+          localStorage.setItem('aramkit.live.aiStyle', aiStyle)
+          localStorage.setItem('aramkit.live.aiCorpus', aiCorpus)
+        } catch {}
+      }, [aiEnabled, aiStyle, aiCorpus])
+
       const loadReview = useCallback(async (force = false) => {
-        if (!data?.gameId) return
+        if (!data?.gameId || !aiEnabled) return
         if (!force && attempted.current === data.gameId) return
         attempted.current = data.gameId
         setLoading(true)
         setError('')
         try {
-          const payload = await getJson('review', { gameId: data.gameId })
+          const payload = await getJson(
+            'review',
+            { gameId: data.gameId },
+            { style: aiStyle, corpus: aiCorpus },
+          )
           setReview(payload.review)
         } catch (err) {
           setError(err instanceof Error ? err.message : String(err))
         } finally {
           setLoading(false)
         }
-      }, [data?.gameId])
+      }, [data?.gameId, aiEnabled, aiStyle, aiCorpus])
 
       useEffect(() => {
-        if (data?.gameId) loadReview()
-      }, [data?.gameId, loadReview])
+        if (data?.gameId && aiEnabled) loadReview()
+      }, [data?.gameId, aiEnabled, loadReview])
 
       if (!data) return null
       return h(
@@ -695,7 +819,49 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
             ),
           ),
         ),
-        h('div', { className: 'ol-review' },
+        h('details', { className: 'ol-settings' },
+          h('summary', null, TEXT.aiSettings),
+          h('div', { className: 'ol-settings-body' },
+            h('div', { className: 'ol-settings-row' },
+              h('label', null,
+                h('input', {
+                  type: 'checkbox',
+                  checked: aiEnabled,
+                  onChange: (event) => {
+                    const next = event.target.checked
+                    setAiEnabled(next)
+                    window.dispatchEvent(new CustomEvent(AI_EVENT, { detail: next }))
+                  },
+                }),
+                ` ${TEXT.aiEnabled}`,
+              ),
+              h('span', { className: 'ol-settings-hint' }, TEXT.settingsSaved),
+            ),
+            aiEnabled
+              ? h('div', null,
+                  h('div', { className: 'ol-settings-row' },
+                    h('label', null, TEXT.aiStyle),
+                    h('select', {
+                      value: aiStyle,
+                      onChange: (event) => setAiStyle(event.target.value),
+                    },
+                      AI_STYLE_OPTIONS.map((row) => h('option', { key: row.id, value: row.id }, row.label)),
+                    ),
+                  ),
+                  h('label', { className: 'ol-settings-hint' }, TEXT.aiCorpus),
+                  h('textarea', {
+                    value: aiCorpus,
+                    maxLength: 4000,
+                    placeholder: TEXT.aiCorpusPlaceholder,
+                    onChange: (event) => setAiCorpus(event.target.value),
+                  }),
+                )
+              : h('div', { className: 'ol-settings-hint' }, TEXT.aiDisabledHint),
+          ),
+        ),
+        !aiEnabled
+          ? h('div', { className: 'ol-ai-off' }, TEXT.aiDisabledHint)
+          : h('div', { className: 'ol-review' },
           h('div', { className: 'ol-review-head' },
             h('h2', null, TEXT.aiReview),
             h('button', { type: 'button', className: 'ol-btn', onClick: () => loadReview(true), disabled: loading }, loading ? TEXT.loading : TEXT.retryAi),
@@ -737,8 +903,32 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
       const [diagnostic, setDiagnostic] = useState(null)
       const [connectError, setConnectError] = useState('')
       const [connecting, setConnecting] = useState(false)
+      const [aiEnabled, setAiEnabled] = useState(() => {
+        try {
+          return localStorage.getItem('aramkit.live.aiEnabled') !== '0'
+        } catch {
+          return true
+        }
+      })
       const autoTried = useRef(false)
       const alive = useRef(true)
+
+      useEffect(() => {
+        const onChange = (event) => setAiEnabled(Boolean(event.detail))
+        window.addEventListener(AI_EVENT, onChange)
+        return () => window.removeEventListener(AI_EVENT, onChange)
+      }, [])
+
+      const toggleAi = useCallback(() => {
+        setAiEnabled((current) => {
+          const next = !current
+          try {
+            localStorage.setItem('aramkit.live.aiEnabled', next ? '1' : '0')
+          } catch {}
+          window.dispatchEvent(new CustomEvent(AI_EVENT, { detail: next }))
+          return next
+        })
+      }, [])
 
       const poll = useCallback(async (force = false) => {
         try {
@@ -845,6 +1035,12 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
             h('div', { className: 'ol-meta' },
               h('span', { className: `ol-pill ${state?.connected ? 'ok' : 'bad'}` }, h('span', { className: 'ol-dot' }), status),
               state?.champSelect ? h('span', { className: 'ol-pill gold' }, `版本 ${state.champSelect.version}`) : null,
+              h('button', {
+                type: 'button',
+                className: 'ol-btn',
+                title: aiEnabled ? '关闭 AI 锐评，只显示结算' : '开启 AI 锐评',
+                onClick: toggleAi,
+              }, `AI 锐评 ${aiEnabled ? '开' : '关'}`),
               h('button', { type: 'button', className: 'ol-btn', onClick: () => { setRefreshing(true); poll(true) }, disabled: refreshing }, refreshing ? TEXT.loading : TEXT.retry),
             ),
           ),
