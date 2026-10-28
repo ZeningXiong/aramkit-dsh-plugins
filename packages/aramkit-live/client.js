@@ -7,6 +7,7 @@ window.__ModuleLoader__.load({
 
     const API = '/aramkit-live'
     const AI_EVENT = 'aramkit-live-ai-toggle'
+    const AI_SETTINGS_EVENT = 'aramkit-live-ai-settings'
     const POSTGAME_PHASES = new Set(['PreEndOfGame', 'EndOfGame', 'WaitingForStats'])
     const AI_STYLE_OPTIONS = [
       { id: 'sharp', label: '毒舌锐评' },
@@ -268,6 +269,7 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
 .ol-player-sub{font-size:9px;color:var(--dsw-alias-label-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ol-live-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:13px}
 .ol-reco{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);gap:12px}
+.ol-reco.stacked{grid-template-columns:1fr}
 .ol-label{font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--dsw-alias-label-secondary);font-weight:750;margin-bottom:6px}
 .ol-items{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .ol-item{display:flex;flex-direction:column;align-items:center;gap:3px;width:50px;min-width:0}
@@ -283,6 +285,8 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
 .ol-arch-tab:hover{color:var(--dsw-alias-label-primary)}
 .ol-arch-tab.active{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 14%,var(--dsw-alias-bg-layer-1));color:var(--dsw-alias-label-primary);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--dsw-alias-brand-primary) 22%,transparent)}
 .ol-arch-tab span{font-size:9px;color:var(--dsw-alias-label-secondary)}
+.ol-arch-single{font-size:11px;color:var(--dsw-alias-label-secondary);margin-bottom:8px}
+.ol-arch-single:before{content:"◆";color:var(--dsw-alias-brand-primary);margin-right:5px;font-size:8px}
 .ol-aug-tabs{display:flex;gap:3px;padding:3px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base);border-radius:8px;width:fit-content;margin-bottom:8px;max-width:100%;overflow:auto}
 .ol-aug-tab{border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;font-weight:650;height:28px;padding:0 10px;border-radius:5px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .ol-aug-tab.active{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 14%,var(--dsw-alias-bg-layer-1));color:var(--dsw-alias-label-primary)}
@@ -304,7 +308,8 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
 .ol-combo{display:flex;align-items:center;gap:6px;padding:6px 4px;border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 45%,transparent);font-size:11px}
 .ol-combo:last-child{border-bottom:0}
 .ol-combo img{width:24px;height:24px;border-radius:5px;object-fit:cover}
-.ol-combo span{margin-left:auto;font-weight:700}
+.ol-combo-name{font-size:10px;color:var(--dsw-alias-label-primary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:2px}
+.ol-combo-win{margin-left:auto;font-weight:700;font-size:11px;white-space:nowrap}
 .ol-post-head{display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid var(--dsw-alias-border-l1);border-radius:16px;padding:16px 18px;background:linear-gradient(120deg,color-mix(in srgb,#63d99d 8%,var(--dsw-alias-bg-layer-1)),var(--dsw-alias-bg-layer-1) 60%);margin-bottom:13px}
 .ol-post-head.loss{background:linear-gradient(120deg,color-mix(in srgb,#ff7373 8%,var(--dsw-alias-bg-layer-1)),var(--dsw-alias-bg-layer-1) 60%)}
 .ol-post-title{font-size:22px;font-weight:800;letter-spacing:-.3px}
@@ -331,6 +336,9 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
 .ol-settings textarea{width:100%;min-height:86px;resize:vertical;line-height:1.6;margin-top:6px}
 .ol-settings textarea:focus,.ol-settings select:focus{border-color:var(--dsw-alias-brand-primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--dsw-alias-brand-primary) 14%,transparent)}
 .ol-settings-hint{font-size:10px;color:var(--dsw-alias-label-secondary);line-height:1.6}
+.ol-ai-panel{margin-bottom:12px}
+.ol-ai-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.ol-ai-panel-head strong{font-size:13px}
 .ol-ai-off{border:1px dashed var(--dsw-alias-border-l2);border-radius:11px;padding:14px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.6}
 .ol-ingame-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin-top:4px}
 .ol-ingame-tab{display:flex;align-items:center;gap:7px;text-align:left;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:inherit;padding:8px;border-radius:10px;cursor:pointer;min-width:0;transition:border-color .15s,background .15s}
@@ -439,7 +447,7 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
       )
     }
 
-    function Recommendation({ data }) {
+    function Recommendation({ data, stacked = false }) {
       const [rarity, setRarity] = useState('prismatic')
       const [archetypeKey, setArchetypeKey] = useState(null)
       const [augOpen, setAugOpen] = useState(false)
@@ -462,7 +470,7 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
       const labels = { prismatic: '棱彩', gold: '黄金', silver: '白银' }
       return h(
         'div',
-        { className: 'ol-reco' },
+        { className: `ol-reco${stacked ? ' stacked' : ''}` },
         h('div', null,
           h('div', { className: 'ol-label' }, TEXT.builds),
           archetypes.length > 1
@@ -480,7 +488,9 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
                   ),
                 ),
               )
-            : null,
+            : archetypes.length === 1
+              ? h('div', { className: 'ol-arch-single' }, `${TEXT.archetype}：${archetypes[0].label}`)
+              : null,
           starter ? h('div', { style: { marginBottom: '7px' } },
             h('div', { className: 'ol-label' }, TEXT.starters),
             h(Items, { items: starter.items }),
@@ -555,7 +565,8 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
                 combos.slice(0, 2).map((combo, index) =>
                   h('div', { className: 'ol-combo', key: index },
                     combo.augments.map((row) => h(Img, { key: row.id, src: row.icon, alt: row.name, size: 24 })),
-                    h('span', null, pct(combo.winRate)),
+                    h('span', { className: 'ol-combo-name' }, combo.augments.map((row) => row.name).join(' + ')),
+                    h('span', { className: 'ol-combo-win' }, pct(combo.winRate)),
                   ),
                 ),
               )
@@ -696,7 +707,7 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
           loading && !recommendation
             ? h('div', { className: 'ol-loading' }, h('span', { className: 'ol-spinner' }), TEXT.loading)
             : recommendation
-              ? h('div', { style: { marginTop: '12px' } }, h(Recommendation, { data: recommendation }))
+              ? h('div', { style: { marginTop: '12px' } }, h(Recommendation, { data: recommendation, stacked: true }))
               : null,
         ),
       )
@@ -733,6 +744,15 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
         const onChange = (event) => setAiEnabled(Boolean(event.detail))
         window.addEventListener(AI_EVENT, onChange)
         return () => window.removeEventListener(AI_EVENT, onChange)
+      }, [])
+
+      useEffect(() => {
+        const onChange = (event) => {
+          if (event.detail?.style) setAiStyle(event.detail.style)
+          if (typeof event.detail?.corpus === 'string') setAiCorpus(event.detail.corpus)
+        }
+        window.addEventListener(AI_SETTINGS_EVENT, onChange)
+        return () => window.removeEventListener(AI_SETTINGS_EVENT, onChange)
       }, [])
 
       useEffect(() => {
@@ -843,7 +863,10 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
                     h('label', null, TEXT.aiStyle),
                     h('select', {
                       value: aiStyle,
-                      onChange: (event) => setAiStyle(event.target.value),
+                      onChange: (event) => {
+                        setAiStyle(event.target.value)
+                        window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: { style: event.target.value, corpus: aiCorpus } }))
+                      },
                     },
                       AI_STYLE_OPTIONS.map((row) => h('option', { key: row.id, value: row.id }, row.label)),
                     ),
@@ -853,7 +876,10 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
                     value: aiCorpus,
                     maxLength: 4000,
                     placeholder: TEXT.aiCorpusPlaceholder,
-                    onChange: (event) => setAiCorpus(event.target.value),
+                    onChange: (event) => {
+                      setAiCorpus(event.target.value)
+                      window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: { style: aiStyle, corpus: event.target.value } }))
+                    },
                   }),
                 )
               : h('div', { className: 'ol-settings-hint' }, TEXT.aiDisabledHint),
@@ -889,6 +915,44 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
       )
     }
 
+    function AiSettingsPanel({ aiEnabled, setAiEnabled, aiStyle, setAiStyle, aiCorpus, setAiCorpus, onClose }) {
+      return h('div', { className: 'ol-settings ol-ai-panel' },
+        h('div', { className: 'ol-ai-panel-head' },
+          h('strong', null, TEXT.aiSettings),
+          h('button', { type: 'button', className: 'ol-btn', onClick: onClose }, '关闭'),
+        ),
+        h('div', { className: 'ol-settings-body' },
+          h('div', { className: 'ol-settings-row' },
+            h('label', null,
+              h('input', {
+                type: 'checkbox',
+                checked: aiEnabled,
+                onChange: (event) => setAiEnabled(event.target.checked),
+              }),
+              ` ${TEXT.aiEnabled}`,
+            ),
+            h('span', { className: 'ol-settings-hint' }, TEXT.settingsSaved),
+          ),
+          h('div', { className: 'ol-settings-row' },
+            h('label', null, TEXT.aiStyle),
+            h('select', {
+              value: aiStyle,
+              onChange: (event) => setAiStyle(event.target.value),
+            },
+              AI_STYLE_OPTIONS.map((row) => h('option', { key: row.id, value: row.id }, row.label)),
+            ),
+          ),
+          h('label', { className: 'ol-settings-hint' }, TEXT.aiCorpus),
+          h('textarea', {
+            value: aiCorpus,
+            maxLength: 4000,
+            placeholder: TEXT.aiCorpusPlaceholder,
+            onChange: (event) => setAiCorpus(event.target.value),
+          }),
+        ),
+      )
+    }
+
     function Page() {
       const [state, setState] = useState(null)
       const [error, setError] = useState('')
@@ -912,6 +976,38 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
       })
       const autoTried = useRef(false)
       const alive = useRef(true)
+      const [aiStyle, setAiStyle] = useState(() => {
+        try {
+          return localStorage.getItem('aramkit.live.aiStyle') || 'sharp'
+        } catch {
+          return 'sharp'
+        }
+      })
+      const [aiCorpus, setAiCorpus] = useState(() => {
+        try {
+          return localStorage.getItem('aramkit.live.aiCorpus') || ''
+        } catch {
+          return ''
+        }
+      })
+      const [aiSettingsOpen, setAiSettingsOpen] = useState(false)
+
+      useEffect(() => {
+        try {
+          localStorage.setItem('aramkit.live.aiEnabled', aiEnabled ? '1' : '0')
+          localStorage.setItem('aramkit.live.aiStyle', aiStyle)
+          localStorage.setItem('aramkit.live.aiCorpus', aiCorpus)
+        } catch {}
+      }, [aiEnabled, aiStyle, aiCorpus])
+
+      useEffect(() => {
+        const onChange = (event) => {
+          if (event.detail?.style) setAiStyle(event.detail.style)
+          if (typeof event.detail?.corpus === 'string') setAiCorpus(event.detail.corpus)
+        }
+        window.addEventListener(AI_SETTINGS_EVENT, onChange)
+        return () => window.removeEventListener(AI_SETTINGS_EVENT, onChange)
+      }, [])
 
       useEffect(() => {
         const onChange = (event) => setAiEnabled(Boolean(event.detail))
@@ -928,6 +1024,24 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
           window.dispatchEvent(new CustomEvent(AI_EVENT, { detail: next }))
           return next
         })
+      }, [])
+
+      const updateAiStyle = useCallback((value) => {
+        setAiStyle(value)
+        window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: { style: value, corpus: aiCorpus } }))
+      }, [aiCorpus])
+
+      const updateAiCorpus = useCallback((value) => {
+        setAiCorpus(value)
+        window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: { style: aiStyle, corpus: value } }))
+      }, [aiStyle])
+
+      const updateAiEnabled = useCallback((value) => {
+        setAiEnabled(value)
+        try {
+          localStorage.setItem('aramkit.live.aiEnabled', value ? '1' : '0')
+        } catch {}
+        window.dispatchEvent(new CustomEvent(AI_EVENT, { detail: value }))
       }, [])
 
       const poll = useCallback(async (force = false) => {
@@ -1038,6 +1152,11 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
               h('button', {
                 type: 'button',
                 className: 'ol-btn',
+                onClick: () => setAiSettingsOpen((open) => !open),
+              }, TEXT.aiSettings),
+              h('button', {
+                type: 'button',
+                className: 'ol-btn',
                 title: aiEnabled ? '关闭 AI 锐评，只显示结算' : '开启 AI 锐评',
                 onClick: toggleAi,
               }, `AI 锐评 ${aiEnabled ? '开' : '关'}`),
@@ -1045,6 +1164,17 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
             ),
           ),
           error ? h('div', { className: 'ol-error' }, error) : null,
+          aiSettingsOpen
+            ? h(AiSettingsPanel, {
+                aiEnabled,
+                setAiEnabled: updateAiEnabled,
+                aiStyle,
+                setAiStyle: updateAiStyle,
+                aiCorpus,
+                setAiCorpus: updateAiCorpus,
+                onClose: () => setAiSettingsOpen(false),
+              })
+            : null,
           state?.connected === false
             ? h('div', null,
                 h('div', { className: 'ol-empty' },

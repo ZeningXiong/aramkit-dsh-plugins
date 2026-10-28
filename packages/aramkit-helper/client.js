@@ -483,6 +483,8 @@ radial-gradient(900px 420px at 95% 0%, rgba(216,180,106,.07), transparent 70%),
 .ak-arch-tab:hover{color:var(--dsw-alias-label-primary)}
 .ak-arch-tab.active{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 14%,var(--dsw-alias-bg-layer-1));color:var(--dsw-alias-label-primary);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--dsw-alias-brand-primary) 22%,transparent)}
 .ak-arch-tab span{font-size:9px;color:var(--dsw-alias-label-secondary)}
+.ak-arch-single{font-size:11px;color:var(--dsw-alias-label-secondary);margin-bottom:8px}
+.ak-arch-single:before{content:"◆";color:var(--dsw-alias-brand-primary);margin-right:5px;font-size:8px}
 .ak-rarity-tabs{display:flex;gap:4px;padding:4px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base);border-radius:11px;width:fit-content;margin-bottom:11px;max-width:100%;overflow:auto}
 .ak-rarity-tab{appearance:none;border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;font-weight:650;height:34px;padding:0 14px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;white-space:nowrap;transition:background .15s,color .15s,box-shadow .15s}
 .ak-rarity-tab:hover{color:var(--dsw-alias-label-primary);background:color-mix(in srgb,var(--dsw-alias-brand-primary) 7%,transparent)}
@@ -514,7 +516,8 @@ radial-gradient(900px 420px at 95% 0%, rgba(216,180,106,.07), transparent 70%),
 .ak-combos{margin-top:10px;padding-top:9px;border-top:1px solid var(--dsw-alias-border-l1)}
 .ak-combo{display:flex;align-items:center;gap:6px;padding:5px 0;font-size:11px}
 .ak-combo img{width:24px;height:24px;border-radius:5px;object-fit:cover}
-.ak-combo span{margin-left:auto;font-weight:750;color:var(--dsw-alias-label-primary)}
+.ak-combo-name{font-size:10px;color:var(--dsw-alias-label-primary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:2px}
+.ak-combo-win{margin-left:auto;font-weight:750;color:var(--dsw-alias-label-primary);font-size:11px;white-space:nowrap}
 .ak-skeleton{height:13px;border-radius:6px;background:linear-gradient(90deg,var(--dsw-alias-bg-layer-2),color-mix(in srgb,var(--dsw-alias-brand-primary) 9%,var(--dsw-alias-bg-layer-2)),var(--dsw-alias-bg-layer-2));background-size:200% 100%;animation:ak-shimmer 1.2s linear infinite}
 @keyframes ak-shimmer{to{background-position:-200% 0}}
 .ak-loading{border:1px solid var(--dsw-alias-border-l1);border-radius:16px;padding:28px;background:var(--dsw-alias-bg-layer-1)}
@@ -1189,7 +1192,9 @@ radial-gradient(900px 420px at 95% 0%, rgba(216,180,106,.07), transparent 70%),
                               ),
                             ),
                           )
-                        : null,
+                        : archetypes.length === 1
+                          ? h('div', { className: 'ak-arch-single' }, `流派：${archetypes[0].label}`)
+                          : null,
                       starters
                         ? h(
                             'div',
@@ -1427,7 +1432,8 @@ radial-gradient(900px 420px at 95% 0%, rgba(216,180,106,.07), transparent 70%),
                           data.augmentCombinations.slice(0, 2).map((combo, index) =>
                             h('div', { className: 'ak-combo', key: index },
                               combo.augments.map((row) => h(Img, { key: row.id, src: row.icon, alt: row.name, size: 24 })),
-                              h('span', null, pct(combo.winRate)),
+                              h('span', { className: 'ak-combo-name' }, combo.augments.map((row) => row.name).join(' + ')),
+                              h('span', { className: 'ak-combo-win' }, pct(combo.winRate)),
                             ),
                           ),
                         )

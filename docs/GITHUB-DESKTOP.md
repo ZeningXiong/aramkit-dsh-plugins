@@ -116,8 +116,8 @@ fix: keep in-game champion recommendations
 GitHub Desktop 不直接管理 tag，如果需要 Release：
 
 1. 打开仓库页面 → **Releases → Draft a new release**；
-2. Tag 例如 `v1.0.10`；
-3. 标题写“海斗助手 v1.0.10”；
+2. Tag 例如 `v1.0.11`；
+3. 标题写“海斗助手 v1.0.11”；
 4. 说明本次改动；
 5. 发布。
 

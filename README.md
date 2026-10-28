@@ -13,8 +13,8 @@
 
 | 插件 | 版本 | 路径 |
 |---|---|---|
-| 海斗助手隔离版 | v1.0.8 | `packages/aramkit-helper` |
-| 海斗助手在线版 | v1.0.10 | `packages/aramkit-live` |
+| 海斗助手隔离版 | v1.0.9 | `packages/aramkit-helper` |
+| 海斗助手在线版 | v1.0.11 | `packages/aramkit-live` |
 
 ---
 

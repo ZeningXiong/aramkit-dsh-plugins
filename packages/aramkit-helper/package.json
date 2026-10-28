@@ -1,6 +1,6 @@
 {
   "name": "@local/aramkit-helper",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "private": true,
   "type": "module",
   "description": "海斗助手隔离版：队友隐藏分、全分段/高分段英雄出装与按品质分组的海克斯推荐",
