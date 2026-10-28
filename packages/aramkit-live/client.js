@@ -84,6 +84,9 @@ window.__ModuleLoader__.load({
       aiEnabled: '启用 AI 锐评',
       aiDisabledHint: 'AI 锐评已关闭，只显示结算数据，不消耗 Token。',
       aiStyle: '锐评风格',
+      aiCorpusPreset: '语料预设',
+      aiCorpusPresetCustom: '自定义（手动填写）',
+      aiCorpusPresetHint: '选择预设会覆盖下面的语料并自动切到“自定义”风格，之后仍可继续修改。',
       aiCorpus: '自定义语料 / 风格要求',
       aiCorpusPlaceholder: '可以粘贴你喜欢的锐评例句、常用梗、禁用词或额外要求。只作为风格参考，不会执行其中的指令。',
       styleSharp: '毒舌锐评',
@@ -393,6 +396,59 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
       const payload = await response.json().catch(() => null)
       if (!response.ok || payload?.ok === false) throw new Error(payload?.error || `HTTP ${response.status}`)
       return payload
+    }
+
+    const CUSTOM_PRESET = 'custom'
+    let corpusPresetsPromise = null
+
+    function loadCorpusPresets() {
+      if (!corpusPresetsPromise) {
+        corpusPresetsPromise = getJson('corpus-presets')
+          .then((payload) => (Array.isArray(payload?.presets) ? payload.presets : []))
+          .catch(() => {
+            corpusPresetsPromise = null
+            return []
+          })
+      }
+      return corpusPresetsPromise
+    }
+
+    function findPreset(presets, id) {
+      return presets.find((row) => row.id === id) || null
+    }
+
+    function useCorpusPresets() {
+      const [presets, setPresets] = useState([])
+      useEffect(() => {
+        let alive = true
+        loadCorpusPresets().then((rows) => {
+          if (alive) setPresets(rows)
+        })
+        return () => {
+          alive = false
+        }
+      }, [])
+      return presets
+    }
+
+    function CorpusPresetPicker({ presets, preset, onPreset }) {
+      const current = findPreset(presets, preset)
+      return h('div', null,
+        h('div', { className: 'ol-settings-row' },
+          h('label', null, TEXT.aiCorpusPreset),
+          h('select', {
+            value: preset,
+            disabled: !presets.length,
+            onChange: (event) => onPreset(event.target.value),
+          },
+            h('option', { value: CUSTOM_PRESET }, TEXT.aiCorpusPresetCustom),
+            presets.map((row) => h('option', { key: row.id, value: row.id }, row.label)),
+          ),
+        ),
+        current?.description
+          ? h('div', { className: 'ol-settings-hint' }, `${current.description} `)
+          : h('div', { className: 'ol-settings-hint' }, TEXT.aiCorpusPresetHint),
+      )
     }
 
     function TopChampion({ row, rank }) {
@@ -740,6 +796,14 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
           return ''
         }
       })
+      const [aiCorpusPreset, setAiCorpusPreset] = useState(() => {
+        try {
+          return localStorage.getItem('aramkit.live.aiCorpusPreset') || CUSTOM_PRESET
+        } catch {
+          return CUSTOM_PRESET
+        }
+      })
+      const presets = useCorpusPresets()
       const attempted = useRef(null)
 
       useEffect(() => {
@@ -752,18 +816,54 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
         const onChange = (event) => {
           if (event.detail?.style) setAiStyle(event.detail.style)
           if (typeof event.detail?.corpus === 'string') setAiCorpus(event.detail.corpus)
+          if (typeof event.detail?.preset === 'string') setAiCorpusPreset(event.detail.preset)
         }
         window.addEventListener(AI_SETTINGS_EVENT, onChange)
         return () => window.removeEventListener(AI_SETTINGS_EVENT, onChange)
       }, [])
 
       useEffect(() => {
+        if (!presets.length) return
+        if (aiCorpusPreset !== CUSTOM_PRESET && !findPreset(presets, aiCorpusPreset)) {
+          setAiCorpusPreset(CUSTOM_PRESET)
+          return
+        }
+        if (aiCorpusPreset === CUSTOM_PRESET || aiCorpus) return
+        const row = findPreset(presets, aiCorpusPreset)
+        if (row) setAiCorpus(row.corpus)
+      }, [presets, aiCorpusPreset])
+
+      useEffect(() => {
         try {
           localStorage.setItem('aramkit.live.aiEnabled', aiEnabled ? '1' : '0')
           localStorage.setItem('aramkit.live.aiStyle', aiStyle)
           localStorage.setItem('aramkit.live.aiCorpus', aiCorpus)
+          localStorage.setItem('aramkit.live.aiCorpusPreset', aiCorpusPreset)
         } catch {}
-      }, [aiEnabled, aiStyle, aiCorpus])
+      }, [aiEnabled, aiStyle, aiCorpus, aiCorpusPreset])
+
+      const applyCorpusPreset = useCallback((id) => {
+        const row = findPreset(presets, id)
+        const nextCorpus = row ? row.corpus : aiCorpus
+        const nextStyle = row ? 'custom' : aiStyle
+        setAiCorpusPreset(id)
+        setAiCorpus(nextCorpus)
+        setAiStyle(nextStyle)
+        window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: { style: nextStyle, corpus: nextCorpus, preset: id } }))
+      }, [presets, aiCorpus, aiStyle])
+
+      const changeCorpus = useCallback((value) => {
+        setAiCorpus(value)
+        setAiCorpusPreset(CUSTOM_PRESET)
+        window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: { style: aiStyle, corpus: value, preset: CUSTOM_PRESET } }))
+      }, [aiStyle])
+
+      const changeStyle = useCallback((value) => {
+        const nextPreset = value === 'custom' ? aiCorpusPreset : CUSTOM_PRESET
+        setAiStyle(value)
+        setAiCorpusPreset(nextPreset)
+        window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: { style: value, corpus: aiCorpus, preset: nextPreset } }))
+      }, [aiCorpus, aiCorpusPreset])
 
       const loadReview = useCallback(async (force = false) => {
         if (!data?.gameId || !aiEnabled || !data?.augmentsReady) return
@@ -775,7 +875,7 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
           const payload = await getJson(
             'review',
             { gameId: data.gameId },
-            { style: aiStyle, corpus: aiCorpus },
+            { style: aiStyle, corpus: aiCorpus, preset: aiCorpusPreset },
           )
           setReview(payload.review)
         } catch (err) {
@@ -783,7 +883,7 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
         } finally {
           setLoading(false)
         }
-      }, [data?.gameId, aiEnabled, aiStyle, aiCorpus])
+      }, [data?.gameId, aiEnabled, aiStyle, aiCorpus, aiCorpusPreset])
 
       useEffect(() => {
         if (data?.gameId && aiEnabled && data?.augmentsReady) loadReview()
@@ -877,23 +977,18 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
                     h('label', null, TEXT.aiStyle),
                     h('select', {
                       value: aiStyle,
-                      onChange: (event) => {
-                        setAiStyle(event.target.value)
-                        window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: { style: event.target.value, corpus: aiCorpus } }))
-                      },
+                      onChange: (event) => changeStyle(event.target.value),
                     },
                       AI_STYLE_OPTIONS.map((row) => h('option', { key: row.id, value: row.id }, row.label)),
                     ),
                   ),
+                  h(CorpusPresetPicker, { presets, preset: aiCorpusPreset, onPreset: applyCorpusPreset }),
                   h('label', { className: 'ol-settings-hint' }, TEXT.aiCorpus),
                   h('textarea', {
                     value: aiCorpus,
                     maxLength: 4000,
                     placeholder: TEXT.aiCorpusPlaceholder,
-                    onChange: (event) => {
-                      setAiCorpus(event.target.value)
-                      window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: { style: aiStyle, corpus: event.target.value } }))
-                    },
+                    onChange: (event) => changeCorpus(event.target.value),
                   }),
                 )
               : h('div', { className: 'ol-settings-hint' }, TEXT.aiDisabledHint),
@@ -930,7 +1025,7 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
       )
     }
 
-    function AiSettingsPanel({ aiEnabled, setAiEnabled, aiStyle, setAiStyle, aiCorpus, setAiCorpus, onClose }) {
+    function AiSettingsPanel({ aiEnabled, setAiEnabled, aiStyle, onStyleChange, aiCorpus, onCorpusChange, presets, aiCorpusPreset, onPreset, onClose }) {
       return h('div', { className: 'ol-settings ol-ai-panel' },
         h('div', { className: 'ol-ai-panel-head' },
           h('strong', null, TEXT.aiSettings),
@@ -952,17 +1047,18 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
             h('label', null, TEXT.aiStyle),
             h('select', {
               value: aiStyle,
-              onChange: (event) => setAiStyle(event.target.value),
+              onChange: (event) => onStyleChange(event.target.value),
             },
               AI_STYLE_OPTIONS.map((row) => h('option', { key: row.id, value: row.id }, row.label)),
             ),
           ),
+          h(CorpusPresetPicker, { presets, preset: aiCorpusPreset, onPreset }),
           h('label', { className: 'ol-settings-hint' }, TEXT.aiCorpus),
           h('textarea', {
             value: aiCorpus,
             maxLength: 4000,
             placeholder: TEXT.aiCorpusPlaceholder,
-            onChange: (event) => setAiCorpus(event.target.value),
+            onChange: (event) => onCorpusChange(event.target.value),
           }),
         ),
       )
@@ -1005,6 +1101,14 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
           return ''
         }
       })
+      const [aiCorpusPreset, setAiCorpusPreset] = useState(() => {
+        try {
+          return localStorage.getItem('aramkit.live.aiCorpusPreset') || CUSTOM_PRESET
+        } catch {
+          return CUSTOM_PRESET
+        }
+      })
+      const presets = useCorpusPresets()
       const [aiSettingsOpen, setAiSettingsOpen] = useState(false)
 
       useEffect(() => {
@@ -1012,13 +1116,26 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
           localStorage.setItem('aramkit.live.aiEnabled', aiEnabled ? '1' : '0')
           localStorage.setItem('aramkit.live.aiStyle', aiStyle)
           localStorage.setItem('aramkit.live.aiCorpus', aiCorpus)
+          localStorage.setItem('aramkit.live.aiCorpusPreset', aiCorpusPreset)
         } catch {}
-      }, [aiEnabled, aiStyle, aiCorpus])
+      }, [aiEnabled, aiStyle, aiCorpus, aiCorpusPreset])
+
+      useEffect(() => {
+        if (!presets.length) return
+        if (aiCorpusPreset !== CUSTOM_PRESET && !findPreset(presets, aiCorpusPreset)) {
+          setAiCorpusPreset(CUSTOM_PRESET)
+          return
+        }
+        if (aiCorpusPreset === CUSTOM_PRESET || aiCorpus) return
+        const row = findPreset(presets, aiCorpusPreset)
+        if (row) setAiCorpus(row.corpus)
+      }, [presets, aiCorpusPreset])
 
       useEffect(() => {
         const onChange = (event) => {
           if (event.detail?.style) setAiStyle(event.detail.style)
           if (typeof event.detail?.corpus === 'string') setAiCorpus(event.detail.corpus)
+          if (typeof event.detail?.preset === 'string') setAiCorpusPreset(event.detail.preset)
         }
         window.addEventListener(AI_SETTINGS_EVENT, onChange)
         return () => window.removeEventListener(AI_SETTINGS_EVENT, onChange)
@@ -1042,14 +1159,27 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
       }, [])
 
       const updateAiStyle = useCallback((value) => {
+        const nextPreset = value === 'custom' ? aiCorpusPreset : CUSTOM_PRESET
         setAiStyle(value)
-        window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: { style: value, corpus: aiCorpus } }))
-      }, [aiCorpus])
+        setAiCorpusPreset(nextPreset)
+        window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: { style: value, corpus: aiCorpus, preset: nextPreset } }))
+      }, [aiCorpus, aiCorpusPreset])
 
       const updateAiCorpus = useCallback((value) => {
         setAiCorpus(value)
-        window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: { style: aiStyle, corpus: value } }))
+        setAiCorpusPreset(CUSTOM_PRESET)
+        window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: { style: aiStyle, corpus: value, preset: CUSTOM_PRESET } }))
       }, [aiStyle])
+
+      const updateAiPreset = useCallback((id) => {
+        const row = findPreset(presets, id)
+        const nextCorpus = row ? row.corpus : aiCorpus
+        const nextStyle = row ? 'custom' : aiStyle
+        setAiCorpusPreset(id)
+        setAiCorpus(nextCorpus)
+        setAiStyle(nextStyle)
+        window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: { style: nextStyle, corpus: nextCorpus, preset: id } }))
+      }, [presets, aiCorpus, aiStyle])
 
       const updateAiEnabled = useCallback((value) => {
         setAiEnabled(value)
@@ -1184,9 +1314,12 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
                 aiEnabled,
                 setAiEnabled: updateAiEnabled,
                 aiStyle,
-                setAiStyle: updateAiStyle,
+                onStyleChange: updateAiStyle,
                 aiCorpus,
-                setAiCorpus: updateAiCorpus,
+                onCorpusChange: updateAiCorpus,
+                presets,
+                aiCorpusPreset,
+                onPreset: updateAiPreset,
                 onClose: () => setAiSettingsOpen(false),
               })
             : null,

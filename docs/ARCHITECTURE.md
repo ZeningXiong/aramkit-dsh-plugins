@@ -82,7 +82,8 @@
 | `GET /aramkit-live/diagnose` | 候选路径、日志、进程、连接诊断 |
 | `GET /aramkit-live/champion?id=&dataset=` | 英雄推荐数据 |
 | `GET /aramkit-live/champions?dataset=` | 英雄列表 |
-| `GET /aramkit-live/review?gameId=` | AI 锐评 |
+| `GET /aramkit-live/review?gameId=` | AI 锐评（可带 `style` / `corpus` / `preset`） |
+| `GET /aramkit-live/corpus-presets` | 内置语料预设（虎扑毒舌 / 海斗专业分析 / 专业抓处） |
 
 ### 状态流
 
@@ -127,7 +128,7 @@ PreEndOfGame / EndOfGame / WaitingForStats
 
 - 想增加新的数据面板：在 `client.js` 里新增组件，复用现有 `/champion` 数据。
 - 想增加新的 LCU 数据：在 `lcu.js` 加只读函数，在 `index.js` 加路由。
-- 想修改 AI 锐评风格：修改 `index.js` 的 `generateReview()` prompt。
+- 想修改 AI 锐评风格：修改 `index.js` 的 `generateReview()` prompt；内置语料在 `index.js` 的 `CORPUS_PRESETS`。
 - 想支持其他语言：`client.js` 目前是中文文案；可仿照隔离版的语言切换，把文案抽成字典。
 
 ## 已知限制

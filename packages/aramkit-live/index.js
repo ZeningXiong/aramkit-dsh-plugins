@@ -544,6 +544,79 @@ const AI_STYLE_PROMPTS = {
   custom: '按照用户提供的语料和风格要求来写。',
 }
 
+// 预置语料：每条都按 title/comment 的输出格式写，控制在 4000 字以内。
+// 选中预设时前端会把风格切到 custom，避免风格提示和语料打架。
+export const CORPUS_PRESETS = [
+  {
+    id: 'hupu',
+    label: '虎扑毒舌',
+    description: '虎扑赛后热评体：短句定罪，先结论后数据，损但不脏。',
+    corpus: [
+      '【风格】虎扑赛后热评体：短句、口语，先下结论再补一句数据，爱用反问和一刀收尾，损但不脏。',
+      '【常用词】战犯、纯混、隐身、躺赢、负资产、无效输出、数据刷子、真大腿、血C、扛着走、就这？、典、建议复盘、下把别选了、话说回来、别急。',
+      '【尽力】',
+      'title：一个人扛着四个人走',
+      'comment：伤害占比38%，参团率全场第一，死了两次经济还是队内最高。这局没他早结束了，输了不怪他。',
+      'title：全队唯一在打游戏的人',
+      'comment：输出、承伤、控制三项都在队内前二。队友在送，他在补锅，锅还补上了。',
+      '【犯罪】',
+      'title：钱花在刀背上',
+      'comment：经济全队第二，伤害占比18%，KDA 2/9/3。装备是买齐了，人是不在团里的。',
+      'title：送得很有节奏',
+      'comment：12分钟送6次，每次都在队友刚复活的时候。这不是失误，这是排班。',
+      '【不团队】',
+      'title：打的是单机不是大乱斗',
+      'comment：参团率41%，控制0.8秒，队友治疗0。队友4打5的时候他在边路补刀。',
+      '【写法】一句话落点，不解释第二遍；能用反问就不用陈述；数据只挑最扎心的一个。',
+      '【禁区】不攻击家人、外貌、地域、性别、疾病、学校；不编造数据；不用真实选手黑称。',
+    ].join('\n'),
+  },
+  {
+    id: 'aram-pro',
+    label: '海斗专业分析',
+    description: '教练复盘体：数据优先，点评海克斯、出装和团战决策，给可执行建议。',
+    corpus: [
+      '【风格】教练复盘：冷静、具体、先数据后结论，给可执行建议，不玩梗不阴阳。',
+      '【关注点】伤害占比与伤害转化、承伤与开团时机、控制链、参团率、队友治疗、经济曲线、海克斯与英雄及阵容的契合度、出装是否逆版本。',
+      '【尽力】',
+      'title：前排合格，开团时机偏晚',
+      'comment：承伤42%全队第一，控制3.1秒，但三次开团都发生在队友技能真空期。方向对，节奏慢半拍。',
+      'title：输出核心，站位稳健',
+      'comment：伤害占比35%，死亡2次，经济转化率1.6。唯一问题是中期两次单独吃线，错过了两波关键团。',
+      '【犯罪】',
+      'title：装备路线与阵容冲突',
+      'comment：对面三前排仍走纯穿甲，伤害占比16%。经济不低，但每一分钱都没打在有效目标上。',
+      'title：死亡位置重复',
+      'comment：7次死亡里5次在己方半场被先手，说明进场判断和视野处理都有问题，建议先跟团再补线。',
+      '【不团队】',
+      'title：参团率偏低，资源让渡不足',
+      'comment：参团率44%，队友治疗0，控制1.2秒。边线处理本身没错，但两波关键团缺席直接改变了局势。',
+      '【写法】每条先给1个关键数据，再给1句判断，最后给1条具体建议，例如“下一波跟团”“换一件防装”“把线让给C位”。',
+      '【禁区】不编数据；海克斯数据缺失时写“海克斯数据未同步”；不人身攻击。',
+    ].join('\n'),
+  },
+  {
+    id: 'blame',
+    label: '专业抓处',
+    description: '赛后抓处：火力集中在全队最坑的人，summary 直接点名，其余人一笔带过。',
+    corpus: [
+      '【风格】赛后“抓处”节目：火力集中在全队最坑的那个人，标题直接点问题，语气像老哥拍桌子；其他人一句话定性。',
+      '【结构】summary 一句话点名“本局处是谁、处在哪”；五个人都要写，但只有“处”拿长评和最低分，其余人短评。',
+      '【常用词】处、战犯、本局最大问题、负资产、纯送、节奏黑洞、一个人拖垮一队、这波真没法洗。',
+      '【示例】',
+      'summary：本局处是打野，前期三次无效入侵把节奏全送没了。',
+      'title：一个人送掉整局节奏',
+      'comment：12分钟0/5/1，三次入侵全被反蹲，队友被迫放弃两条线。后面数据刷回来也没用，坑已经挖好了。',
+      'title：跟着一起上头',
+      'comment：明明看到打野崩了还硬跟，双人送温暖，问题第二大。',
+      'title：唯一没崩的人',
+      'comment：伤害占比36%，只死了两次，这局他真没得黑。',
+      '【判定口径】“处”=低贡献、高死亡、关键失误最多的人；全队都还行时，抓关键失误最致命的那一个，不要硬凑。',
+      '【尺度】可以狠、可以夸张，但只针对打法、决策和数据；不攻击家人、外貌、地域、性别、疾病；不编造数据。',
+    ].join('\n'),
+  },
+]
+
 async function generateReview(ctx, postgame, options = {}) {
   if (!ctx.llm || !ctx.agentDefaultModel) throw new Error('当前 DSH 缺少 LLM 服务')
   const selection = ctx.agentDefaultModel.currentSelection()
@@ -661,6 +734,7 @@ export function apply(ctx) {
       }),
     ],
     ['/aramkit-live/diagnose', route(async () => await diagnoseLcu())],
+    ['/aramkit-live/corpus-presets', route(async () => ({ ok: true, presets: CORPUS_PRESETS }))],
     [
       '/aramkit-live/state',
       route(async (url) => {
@@ -747,7 +821,9 @@ export function apply(ctx) {
       route(async (url, body) => {
         let gameId = url.searchParams.get('gameId')
         const style = String(body?.style || url.searchParams.get('style') || 'sharp')
-        const corpus = String(body?.corpus || url.searchParams.get('corpus') || '').trim().slice(0, 4000)
+        const presetId = String(body?.preset || url.searchParams.get('preset') || '').trim()
+        const preset = CORPUS_PRESETS.find((row) => row.id === presetId)
+        const corpus = String(body?.corpus || preset?.corpus || url.searchParams.get('corpus') || '').trim().slice(0, 4000)
         let postgame = lastPostgame
         if (!postgame || !postgame.augmentsReady || (gameId && String(postgame.gameId) !== String(gameId))) {
           const eog = await getEogStatsBlock()
