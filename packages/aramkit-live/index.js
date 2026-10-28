@@ -391,7 +391,7 @@ function normalizeEogPlayer(entry, lookup, resources) {
     gold: stat(stats, 'GOLD_EARNED', 'goldEarned'),
     damage: stat(stats, 'TOTAL_DAMAGE_DEALT_TO_CHAMPIONS', 'totalDamageDealtToChampions'),
     damageTaken: stat(stats, 'TOTAL_DAMAGE_TAKEN', 'totalDamageTaken'),
-    healing: stat(stats, 'TOTAL_HEAL', 'totalHeal', 'totalHealsOnTeammates'),
+    healing: stat(stats, 'TOTAL_HEAL_ON_TEAMMATES', 'totalHealsOnTeammates', 'totalHealOnTeammates'),
     cc: stat(stats, 'TOTAL_CC_TIME', 'totalTimeCCingOthers'),
     vision: stat(stats, 'VISION_SCORE', 'visionScore'),
     damageToObjectives: stat(stats, 'DAMAGE_DEALT_TO_OBJECTIVES', 'damageDealtToObjectives'),
@@ -431,6 +431,14 @@ async function buildPostgame(eog) {
       ? row.augmentIds
       : augmentIdsFromStats(matchParticipant?.stats ?? {})
     row.augments = ids.map((id) => augmentInfo(resources, id)).filter((row) => row.name)
+    if (matchParticipant) {
+      row.healing = stat(
+        matchParticipant.stats,
+        'TOTAL_HEAL_ON_TEAMMATES',
+        'totalHealsOnTeammates',
+        'totalHealOnTeammates',
+      )
+    }
   }
   const augmentsReady = Boolean(matchGame) || allies.some((row) => (row.augments?.length ?? 0) > 0)
   const duration = num(eog.gameLength, eog.gameDuration, 0)
@@ -480,10 +488,11 @@ async function buildPostgame(eog) {
 }
 
 function formatReviewData(postgame) {
+  const { healing, ...teamTotals } = postgame.totals || {}
   return {
     result: postgame.win ? '胜利' : '失败',
     durationSeconds: postgame.gameLength,
-    teamTotals: postgame.totals,
+    teamTotals: { ...teamTotals, teammateHealing: healing || 0 },
     allies: postgame.allies.map((row) => ({
       name: row.gameName || '未知玩家',
       tag: row.tagLine ? `#${row.tagLine}` : '',
@@ -494,7 +503,7 @@ function formatReviewData(postgame) {
       gold: row.gold,
       damage: row.damage,
       damageTaken: row.damageTaken,
-      healing: row.healing,
+      teammateHealing: row.healing,
       ccSeconds: row.cc,
       vision: row.vision,
       metrics: row.metrics,
@@ -550,11 +559,12 @@ async function generateReview(ctx, postgame, options = {}) {
     '如果一个人同时符合“犯罪”和“不团队”，选择更严重的一个，并在 comment 里点出另一个问题。',
     `锐评风格：${styleText}`,
     '要求：',
-    '1. 必须引用具体数据（伤害占比、经济、KDA、承伤、治疗、控制、视野等），不要编造。',
-    '2. “尽力”是队内贡献最高、数据最硬的人；“犯罪”是低贡献、高死亡、经济伤害转化差的人；“不团队”是参团/控制/治疗/承伤明显偏低、打法偏独的人。',
+    '1. 必须引用具体数据（伤害占比、经济、KDA、承伤、队友治疗、控制、视野等），不要编造。',
+    '2. “尽力”是队内贡献最高、数据最硬的人；“犯罪”是低贡献、高死亡、经济伤害转化差的人；“不团队”是参团/控制/队友治疗/承伤明显偏低、打法偏独的人。',
     '3. 语言要符合上面的风格，但只攻击打法和数据，不人身攻击，不歧视。',
     '4. 每个人数据里带有 augments 时，要评价海克斯选择是否契合该英雄、阵容和当局打法；没有 augments 时明确写“海克斯数据未同步”，不要编造。',
-    '5. 只输出 JSON，不要 Markdown 代码块，不要额外解释。',
+    '5. teammateHealing 只统计对队友的治疗；自身吸血、自愈、回复装带来的自我回复不算团队贡献，不要用自身回复量评价队友。',
+    '6. 只输出 JSON，不要 Markdown 代码块，不要额外解释。',
     'JSON 结构：',
     '{"summary":"一句话总结这局友方","players":[{"name":"玩家名","champion":"英雄","verdict":"尽力|犯罪|不团队","score":0,"title":"一句锐评标题","comment":"2-3句带数据依据的锐评"}]}',
     'score 为 0-100 的整数，表示这局发挥。',

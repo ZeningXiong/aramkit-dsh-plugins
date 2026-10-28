@@ -110,7 +110,7 @@ window.__ModuleLoader__.load({
       damage: '伤害',
       damageTaken: '承伤',
       gold: '经济',
-      healing: '治疗',
+      healing: '队友治疗',
       cc: '控制',
       vision: '视野',
       kda: 'KDA',
