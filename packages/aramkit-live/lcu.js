@@ -405,14 +405,16 @@ export async function getEogStatsBlock() {
   return eog && typeof eog === 'object' && eog.gameId ? eog : null
 }
 
-export async function getLatestMatchForPuuid(puuid) {
+export async function getLatestMatchForPuuid(puuid, gameId = '') {
   if (!puuid) return null
   const history = await lcuGet(
-    `/lol-match-history/v1/products/lol/${encodeURIComponent(puuid)}/matches?begIndex=0&endIndex=1`,
-    { timeout: 4000 },
+    `/lol-match-history/v1/products/lol/${encodeURIComponent(puuid)}/matches?begIndex=0&endIndex=5`,
+    { timeout: 5000 },
   )
-  const game = history?.games?.games?.[0] ?? (Array.isArray(history?.games) ? history.games[0] : null)
-  return game && typeof game === 'object' ? game : null
+  const games = history?.games?.games ?? (Array.isArray(history?.games) ? history.games : [])
+  if (!games.length) return null
+  if (gameId) return games.find((game) => String(game?.gameId) === String(gameId)) ?? null
+  return games[0] ?? null
 }
 
 export function getLiveGameData() {

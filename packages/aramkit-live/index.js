@@ -18,7 +18,9 @@ import {
   getChampSelectSession,
   getEogStatsBlock,
   getGameflowPhase,
+  getLatestMatchForPuuid,
   getLiveGameData,
+  getCurrentSummoner,
   getSummonerById,
   inspectLockfile,
   resetLcuCache,
@@ -35,6 +37,7 @@ const ratingCache = new Map()
 const aiCache = new Map()
 let lastPostgame = null
 let lastPostgameAt = 0
+let lastEog = null
 let lastChampSelect = null
 let lastChampSelectAt = 0
 
@@ -316,6 +319,40 @@ function extractEogPlayers(eog) {
   return players
 }
 
+function augmentDescription(meta) {
+  const blocks = meta?.tooltip?.blocks
+  if (!Array.isArray(blocks)) return ''
+  return blocks
+    .map((block) =>
+      (block?.spans ?? [])
+        .map((span) => (span?.type === 'text' ? span.text : span?.label || ''))
+        .join(''),
+    )
+    .filter(Boolean)
+    .join(' ')
+}
+
+function augmentInfo(resources, id) {
+  const meta = resources.augments?.[String(id)]
+  return {
+    id: Number(id),
+    name: meta?.name ?? String(id),
+    icon: meta?.icon ? `https://data.aramkit.cn/${meta.icon}` : '',
+    rarity: meta?.rarity ?? 'silver',
+    rarityLabel: meta?.rarity === 'prismatic' ? '棱彩' : meta?.rarity === 'gold' ? '黄金' : '白银',
+    description: augmentDescription(meta),
+  }
+}
+
+function augmentIdsFromStats(stats) {
+  const ids = []
+  for (let i = 1; i <= 6; i += 1) {
+    const id = stat(stats, `PLAYER_AUGMENT${i}`, `playerAugment${i}`)
+    if (id > 0) ids.push(id)
+  }
+  return [...new Set(ids)]
+}
+
 function normalizeEogPlayer(entry, lookup, resources) {
   const player = entry.player ?? {}
   const stats = player.stats ?? {}
@@ -340,7 +377,9 @@ function normalizeEogPlayer(entry, lookup, resources) {
     isLocalPlayer: player.isLocalPlayer === true || player.is_local_player === true,
     gameName: player.riotIdGameName || player.gameName || player.summonerName || '',
     tagLine: player.tagLine || player.riotIdTagline || '',
+    puuid: player.puuid || '',
     championId,
+    augmentIds: augmentIdsFromStats(stats),
     champion: champion
       ? { id: champion.id, name: champion.name, title: champion.title, icon: champion.icon }
       : { id: championId, name: player.championName || String(championId), title: '', icon: '' },
@@ -369,6 +408,31 @@ async function buildPostgame(eog) {
   const local = players.find((row) => row.isLocalPlayer) ?? null
   const localTeamId = local?.teamId ?? 100
   const allies = players.filter((row) => row.teamId === localTeamId).slice(0, 5)
+  let matchGame = null
+  try {
+    const current = await getCurrentSummoner()
+    if (current?.puuid) matchGame = await getLatestMatchForPuuid(current.puuid, eog.gameId)
+  } catch {}
+  const identities = Array.isArray(matchGame?.participantIdentities) ? matchGame.participantIdentities : []
+  const matchParticipants = Array.isArray(matchGame?.participants) ? matchGame.participants : []
+  for (const row of allies) {
+    let matchParticipant = null
+    if (row.puuid) {
+      const identity = identities.find((item) => item?.player?.puuid === row.puuid)
+      if (identity) matchParticipant = matchParticipants.find((item) => item?.participantId === identity.participantId) ?? null
+    }
+    if (!matchParticipant) {
+      matchParticipant =
+        matchParticipants.find(
+          (item) => Number(item?.teamId) === Number(row.teamId) && Number(item?.championId) === Number(row.championId),
+        ) ?? null
+    }
+    const ids = row.augmentIds?.length
+      ? row.augmentIds
+      : augmentIdsFromStats(matchParticipant?.stats ?? {})
+    row.augments = ids.map((id) => augmentInfo(resources, id)).filter((row) => row.name)
+  }
+  const augmentsReady = Boolean(matchGame) || allies.some((row) => (row.augments?.length ?? 0) > 0)
   const duration = num(eog.gameLength, eog.gameDuration, 0)
   const totals = allies.reduce(
     (sum, row) => ({
@@ -404,6 +468,7 @@ async function buildPostgame(eog) {
     gameLength: duration,
     win,
     localTeamId,
+    augmentsReady,
     allies,
     teams: [...new Set(players.map((row) => row.teamId))].map((teamId) => ({
       teamId,
@@ -434,6 +499,10 @@ function formatReviewData(postgame) {
       vision: row.vision,
       metrics: row.metrics,
       items: row.items.map((item) => item.name),
+      augments: (row.augments || []).map((augment) => ({
+        name: augment.name,
+        rarity: augment.rarityLabel,
+      })),
     })),
   }
 }
@@ -484,7 +553,8 @@ async function generateReview(ctx, postgame, options = {}) {
     '1. 必须引用具体数据（伤害占比、经济、KDA、承伤、治疗、控制、视野等），不要编造。',
     '2. “尽力”是队内贡献最高、数据最硬的人；“犯罪”是低贡献、高死亡、经济伤害转化差的人；“不团队”是参团/控制/治疗/承伤明显偏低、打法偏独的人。',
     '3. 语言要符合上面的风格，但只攻击打法和数据，不人身攻击，不歧视。',
-    '4. 只输出 JSON，不要 Markdown 代码块，不要额外解释。',
+    '4. 每个人数据里带有 augments 时，要评价海克斯选择是否契合该英雄、阵容和当局打法；没有 augments 时明确写“海克斯数据未同步”，不要编造。',
+    '5. 只输出 JSON，不要 Markdown 代码块，不要额外解释。',
     'JSON 结构：',
     '{"summary":"一句话总结这局友方","players":[{"name":"玩家名","champion":"英雄","verdict":"尽力|犯罪|不团队","score":0,"title":"一句锐评标题","comment":"2-3句带数据依据的锐评"}]}',
     'score 为 0-100 的整数，表示这局发挥。',
@@ -618,8 +688,12 @@ export function apply(ctx) {
         } else if (phase && POSTGAME_PHASES.has(phase)) {
           const eog = await getEogStatsBlock()
           if (eog) {
+            lastEog = eog
             if (!lastPostgame || String(lastPostgame.gameId) !== String(eog.gameId)) {
               lastPostgame = await buildPostgame(eog)
+              lastPostgameAt = Date.now()
+            } else if (!lastPostgame.augmentsReady) {
+              lastPostgame = await buildPostgame(lastEog)
               lastPostgameAt = Date.now()
             }
             postgame = lastPostgame
@@ -665,13 +739,15 @@ export function apply(ctx) {
         const style = String(body?.style || url.searchParams.get('style') || 'sharp')
         const corpus = String(body?.corpus || url.searchParams.get('corpus') || '').trim().slice(0, 4000)
         let postgame = lastPostgame
-        if (!postgame || (gameId && String(postgame.gameId) !== String(gameId))) {
+        if (!postgame || !postgame.augmentsReady || (gameId && String(postgame.gameId) !== String(gameId))) {
           const eog = await getEogStatsBlock()
           if (!eog) throw new Error('还没有可用的结算数据')
           postgame = await buildPostgame(eog)
+          lastEog = eog
           lastPostgame = postgame
           lastPostgameAt = Date.now()
         }
+        if (!postgame.augmentsReady) throw new Error('结算数据已到，但 match history 还没生成海克斯明细，请稍等几秒再试')
         gameId = String(postgame.gameId)
         const cacheKey = `${gameId}:${createHash('sha1').update(`${style}\n${corpus}`).digest('hex').slice(0, 12)}`
         const cached = aiCache.get(cacheKey)

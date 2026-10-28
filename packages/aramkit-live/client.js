@@ -323,6 +323,8 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
 .ol-table .ol-table-champ img{width:28px;height:28px;border-radius:6px;object-fit:cover}
 .ol-table .ol-table-name{font-weight:650;max-width:150px;overflow:hidden;text-overflow:ellipsis}
 .ol-table .ol-table-tag{font-size:9px;color:var(--dsw-alias-label-secondary)}
+.ol-aug-icons{display:flex;gap:4px;align-items:center}
+.ol-aug-icons img{width:26px;height:26px;border-radius:5px;object-fit:cover;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-2);cursor:help}
 .ol-review{margin-top:13px}
 .ol-settings{border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-1);padding:0;margin-bottom:10px;overflow:hidden}
 .ol-settings summary{cursor:pointer;list-style:none;padding:11px 13px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:8px}
@@ -764,7 +766,7 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
       }, [aiEnabled, aiStyle, aiCorpus])
 
       const loadReview = useCallback(async (force = false) => {
-        if (!data?.gameId || !aiEnabled) return
+        if (!data?.gameId || !aiEnabled || !data?.augmentsReady) return
         if (!force && attempted.current === data.gameId) return
         attempted.current = data.gameId
         setLoading(true)
@@ -784,8 +786,8 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
       }, [data?.gameId, aiEnabled, aiStyle, aiCorpus])
 
       useEffect(() => {
-        if (data?.gameId && aiEnabled) loadReview()
-      }, [data?.gameId, aiEnabled, loadReview])
+        if (data?.gameId && aiEnabled && data?.augmentsReady) loadReview()
+      }, [data?.gameId, data?.augmentsReady, aiEnabled, loadReview])
 
       if (!data) return null
       return h(
@@ -810,8 +812,7 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
                   h('th', null, TEXT.damageTaken),
                   h('th', null, TEXT.gold),
                   h('th', null, TEXT.healing),
-                  h('th', null, TEXT.cc),
-                  h('th', null, TEXT.vision),
+                  h('th', null, TEXT.augments),
                 ),
               ),
               h('tbody', null,
@@ -831,8 +832,21 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
                     h('td', null, compact(row.damageTaken)),
                     h('td', null, compact(row.gold)),
                     h('td', null, compact(row.healing)),
-                    h('td', null, `${Math.round(row.cc)}s`),
-                    h('td', null, Math.round(row.vision)),
+                    h('td', null,
+                      row.augments?.length
+                        ? h('div', { className: 'ol-aug-icons' },
+                            row.augments.map((augment) =>
+                              h('img', {
+                                key: augment.id,
+                                src: augment.icon,
+                                alt: augment.name,
+                                title: `${augment.name} · ${augment.rarityLabel}\n${augment.description || '暂无描述'}`,
+                                loading: 'lazy',
+                              }),
+                            ),
+                          )
+                        : h('span', { className: 'ol-hint' }, data.augmentsReady ? '—' : '同步中…'),
+                    ),
                   ),
                 ),
               ),
@@ -890,8 +904,9 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
           : h('div', { className: 'ol-review' },
           h('div', { className: 'ol-review-head' },
             h('h2', null, TEXT.aiReview),
-            h('button', { type: 'button', className: 'ol-btn', onClick: () => loadReview(true), disabled: loading }, loading ? TEXT.loading : TEXT.retryAi),
+            h('button', { type: 'button', className: 'ol-btn', onClick: () => loadReview(true), disabled: loading || !data.augmentsReady }, loading ? TEXT.loading : TEXT.retryAi),
           ),
+          !data.augmentsReady ? h('div', { className: 'ol-ai-off' }, '正在等待 match history 同步本局海克斯选择…') : null,
           loading ? h('div', { className: 'ol-loading' }, h('span', { className: 'ol-spinner' }), TEXT.aiLoading) : null,
           error ? h('div', { className: 'ol-error' }, `${TEXT.aiError}：${error}`) : null,
           review ? h('div', null,

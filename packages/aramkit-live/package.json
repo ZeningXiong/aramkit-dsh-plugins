@@ -1,6 +1,6 @@
 {
   "name": "@local/aramkit-live",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "private": true,
   "type": "module",
   "description": "海斗助手在线版：连接英雄联盟 LCU，选人推荐、队友隐藏分、自动出装海克斯与赛后 AI 锐评",
