@@ -61,6 +61,7 @@
   - 选人会话归一化、队友 MMR、可选英雄 top5
   - 局内缓存 / Live Client 回退
   - 结算归一化、AI 锐评
+  - 对局记录：`$DSH_HOME/aramkit-live/history.json`，保留 24 小时、最多 60 条
 - `packages/aramkit-live/data.js`
   - 与隔离版共用的 ARAMKit 访问逻辑（独立副本，便于单包发布）
 - `packages/aramkit-live/lcu.js`
@@ -71,19 +72,23 @@
   - 选人页
   - 局内五英雄推荐
   - 结算 / AI 锐评页
+  - 对局记录列表与详情（本局 / 对局记录 两个标签）
   - LCU 手动连接与诊断
 
 ### 路由
 
 | 路由 | 说明 |
 |---|---|
-| `GET /aramkit-live/state` | 当前阶段、选人、局内或结算状态 |
+| `GET /aramkit-live/state` | 当前阶段、选人、局内或结算状态（结算会顺手记录并触发后台锐评） |
 | `GET /aramkit-live/connect?path=` | 指定 lockfile 并重连 |
 | `GET /aramkit-live/diagnose` | 候选路径、日志、进程、连接诊断 |
 | `GET /aramkit-live/champion?id=&dataset=` | 英雄推荐数据 |
 | `GET /aramkit-live/champions?dataset=` | 英雄列表 |
-| `GET /aramkit-live/review?gameId=` | AI 锐评（可带 `style` / `corpus` / `preset`） |
+| `GET /aramkit-live/review?gameId=` | AI 锐评（可带 `style` / `corpus` / `preset` / `force`） |
 | `GET /aramkit-live/corpus-presets` | 内置语料预设（虎扑毒舌 / 海斗专业分析 / 专业抓处） |
+| `GET /aramkit-live/history` | 最近 24 小时对局列表 + AI 设置 |
+| `GET /aramkit-live/history-detail?gameId=` | 单局完整结算 + 锐评 |
+| `POST /aramkit-live/ai-settings` | 客户端同步 AI 开关 / 风格 / 语料，供后台生成使用 |
 
 ### 状态流
 
@@ -104,7 +109,8 @@ PreEndOfGame / EndOfGame / WaitingForStats
   └─ /lol-end-of-game/v1/eog-stats-block
        ├─ 双方玩家 stats 归一化
        ├─ 友方五人 damage/gold/CC/vision 汇总
-       └─ AI prompt → DSH llm.stream
+       ├─ recordPostgame() → history.json（新增对局）
+       └─ 后台 startReviewJob() → DSH llm.stream → 写回该局记录
 ```
 
 ### LCU 发现顺序
@@ -136,4 +142,5 @@ PreEndOfGame / EndOfGame / WaitingForStats
 - LCU 是 Riot 未公开接口，可能随客户端版本变化；
 - WeGame 路径/日志格式可能变化；
 - AI 输出是模型生成，可能不稳定；
+- 对局记录靠面板轮询 `/state` 落盘，DSH 面板完全关闭期间结束的对局不会记录；
 - 高分段样本较少时推荐会显示“暂无数据”。

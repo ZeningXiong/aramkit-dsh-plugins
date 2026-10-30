@@ -5,6 +5,9 @@
  */
 
 import { createHash } from 'node:crypto'
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import {
   buildChampionPayload,
   getChampionLookup,
@@ -29,17 +32,200 @@ import {
 
 const POSTGAME_PHASES = new Set(['PreEndOfGame', 'EndOfGame', 'WaitingForStats'])
 const CHAMP_SELECT_PHASES = new Set(['ChampSelect'])
-const AI_TTL = 30 * 60 * 1000
 const POSTGAME_TTL = 10 * 60 * 1000
 const RATING_TTL = 10 * 60 * 1000
 
 const ratingCache = new Map()
-const aiCache = new Map()
 let lastPostgame = null
 let lastPostgameAt = 0
 let lastEog = null
 let lastChampSelect = null
 let lastChampSelectAt = 0
+
+// --- 对局记录：本地持久化，保留 24 小时 ---
+const DATA_DIR = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'aramkit-live')
+const HISTORY_FILE = join(DATA_DIR, 'history.json')
+const HISTORY_TTL = 24 * 60 * 60 * 1000
+const HISTORY_LIMIT = 60
+
+let historyState = null
+let pluginCtx = null
+const reviewJobs = new Map()
+
+function defaultAiSettings() {
+  return { enabled: true, style: 'sharp', corpus: '', preset: 'custom' }
+}
+
+function localDateKey(ts = Date.now()) {
+  const d = new Date(ts)
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+function normalizeHistoryEntry(entry) {
+  const capturedAt = Number(entry?.capturedAt) || Date.now()
+  const hasReview = Boolean(entry?.review)
+  let reviewStatus = entry?.reviewStatus || (hasReview ? 'ready' : 'idle')
+  let reviewError = entry?.reviewError || ''
+  if (reviewStatus === 'generating' && !hasReview) {
+    reviewStatus = 'error'
+    reviewError = '上次生成被中断，可重试'
+  } else if (reviewStatus === 'generating') {
+    reviewStatus = 'ready'
+  }
+  return {
+    gameId: String(entry?.gameId || ''),
+    date: entry?.date || localDateKey(capturedAt),
+    capturedAt,
+    postgame: entry?.postgame || null,
+    review: entry?.review || null,
+    reviewStatus,
+    reviewError,
+    reviewStyle: entry?.reviewStyle || '',
+    reviewCorpusHash: entry?.reviewCorpusHash || '',
+    reviewAt: Number(entry?.reviewAt) || 0,
+  }
+}
+
+function pruneHistory(entries) {
+  const cutoff = Date.now() - HISTORY_TTL
+  return entries
+    .filter((entry) => entry.gameId && entry.capturedAt >= cutoff)
+    .sort((a, b) => b.capturedAt - a.capturedAt)
+    .slice(0, HISTORY_LIMIT)
+}
+
+function loadHistory() {
+  if (historyState) return historyState
+  let parsed = null
+  try {
+    parsed = JSON.parse(readFileSync(HISTORY_FILE, 'utf8'))
+  } catch {}
+  historyState = {
+    version: 1,
+    settings: {
+      ...defaultAiSettings(),
+      ...(parsed?.settings && typeof parsed.settings === 'object' ? parsed.settings : {}),
+    },
+    entries: pruneHistory(Array.isArray(parsed?.entries) ? parsed.entries.map(normalizeHistoryEntry) : []),
+  }
+  return historyState
+}
+
+function saveHistory() {
+  const state = loadHistory()
+  state.entries = pruneHistory(state.entries)
+  try {
+    mkdirSync(DATA_DIR, { recursive: true })
+    const tmp = `${HISTORY_FILE}.tmp`
+    writeFileSync(tmp, JSON.stringify(state), 'utf8')
+    renameSync(tmp, HISTORY_FILE)
+  } catch {}
+}
+
+function findHistoryEntry(gameId) {
+  const state = loadHistory()
+  state.entries = pruneHistory(state.entries)
+  return state.entries.find((entry) => entry.gameId === String(gameId)) || null
+}
+
+function corpusHash(corpus) {
+  return createHash('sha1').update(String(corpus || '')).digest('hex').slice(0, 12)
+}
+
+function startReviewJob(entry, settings) {
+  const gameId = entry.gameId
+  if (reviewJobs.has(gameId)) return reviewJobs.get(gameId)
+  const style = AI_STYLE_PROMPTS[settings?.style] ? settings.style : 'sharp'
+  const corpus = String(settings?.corpus || '').slice(0, 4000)
+  entry.reviewStatus = 'generating'
+  entry.reviewError = ''
+  entry.reviewStyle = style
+  entry.reviewCorpusHash = corpusHash(corpus)
+  saveHistory()
+  const job = (async () => {
+    try {
+      if (!pluginCtx?.llm) throw new Error('当前 DSH 缺少 LLM 服务')
+      const review = await generateReview(pluginCtx, entry.postgame, { style, corpus })
+      entry.review = review
+      entry.reviewStatus = 'ready'
+      entry.reviewError = ''
+      entry.reviewAt = Date.now()
+    } catch (err) {
+      entry.reviewStatus = 'error'
+      entry.reviewError = err instanceof Error ? err.message : String(err)
+    } finally {
+      reviewJobs.delete(gameId)
+      saveHistory()
+    }
+    return entry
+  })()
+  reviewJobs.set(gameId, job)
+  return job
+}
+
+function maybeAutoReview(entry) {
+  const state = loadHistory()
+  if (!state.settings.enabled) return
+  if (!entry?.postgame?.augmentsReady) return
+  if (entry.review || entry.reviewStatus !== 'idle') return
+  startReviewJob(entry, state.settings).catch(() => {})
+}
+
+function recordPostgame(postgame) {
+  if (!postgame?.gameId) return null
+  const state = loadHistory()
+  const gameId = String(postgame.gameId)
+  let entry = state.entries.find((row) => row.gameId === gameId) || null
+  const isNew = !entry
+  const replaced = Boolean(entry) && entry.postgame !== postgame
+  if (!entry) {
+    entry = normalizeHistoryEntry({ gameId, capturedAt: Date.now(), postgame })
+    state.entries.unshift(entry)
+  } else {
+    entry.postgame = postgame
+  }
+  if (isNew || replaced) {
+    state.entries = pruneHistory(state.entries)
+    saveHistory()
+  }
+  maybeAutoReview(entry)
+  return entry
+}
+
+function publicHistoryEntry(entry, full = false) {
+  const postgame = entry.postgame
+  const me = postgame?.allies?.find((row) => row.isLocalPlayer) || null
+  const row = {
+    gameId: entry.gameId,
+    date: entry.date,
+    capturedAt: entry.capturedAt,
+    win: Boolean(postgame?.win),
+    gameMode: postgame?.gameMode || '',
+    gameLength: postgame?.gameLength || 0,
+    augmentsReady: Boolean(postgame?.augmentsReady),
+    me: me
+      ? {
+          name: me.gameName || '未知玩家',
+          champion: me.champion || null,
+          kills: me.kills,
+          deaths: me.deaths,
+          assists: me.assists,
+        }
+      : null,
+    reviewStatus: entry.reviewStatus,
+    reviewError: entry.reviewError || '',
+    reviewSummary: entry.review?.summary || '',
+    reviewModel: entry.review?.model || '',
+    reviewAt: entry.reviewAt || 0,
+  }
+  if (full) {
+    row.postgame = postgame
+    row.review = entry.review
+    row.reviewStyle = entry.reviewStyle || ''
+  }
+  return row
+}
 
 function sendJson(response, status, body) {
   response.statusCode = status
@@ -705,9 +891,23 @@ async function generateReview(ctx, postgame, options = {}) {
 
 export const inject = ['webServer', 'llm', 'agentDefaultModel']
 
-export { buildChampSelect, buildPostgame, formatReviewData, generateReview }
+export {
+  buildChampSelect,
+  buildPostgame,
+  formatReviewData,
+  generateReview,
+  recordPostgame,
+  loadHistory,
+  saveHistory,
+  findHistoryEntry,
+  publicHistoryEntry,
+  startReviewJob,
+  localDateKey,
+}
 
 export function apply(ctx) {
+  pluginCtx = ctx
+  loadHistory()
   const routes = [
     [
       '/aramkit-live/connect',
@@ -792,6 +992,8 @@ export function apply(ctx) {
           postgame = lastPostgame
         }
 
+        if (postgame) recordPostgame(postgame)
+
         return {
           ok: true,
           connected: true,
@@ -802,6 +1004,45 @@ export function apply(ctx) {
           waiting,
           updatedAt: Date.now(),
         }
+      }),
+    ],
+    [
+      '/aramkit-live/history',
+      route(async () => {
+        const state = loadHistory()
+        const before = state.entries.length
+        state.entries = pruneHistory(state.entries)
+        if (state.entries.length !== before) saveHistory()
+        return {
+          ok: true,
+          today: localDateKey(),
+          settings: state.settings,
+          entries: state.entries.map((entry) => publicHistoryEntry(entry)),
+        }
+      }),
+    ],
+    [
+      '/aramkit-live/history-detail',
+      route(async (url) => {
+        const gameId = String(url.searchParams.get('gameId') || '').trim()
+        if (!gameId) throw new Error('缺少对局 ID')
+        const entry = findHistoryEntry(gameId)
+        if (!entry) throw new Error('没有找到这局记录，可能已超过 24 小时')
+        return { ok: true, entry: publicHistoryEntry(entry, true) }
+      }),
+    ],
+    [
+      '/aramkit-live/ai-settings',
+      route(async (url, body) => {
+        const state = loadHistory()
+        if (body && typeof body === 'object') {
+          if (typeof body.enabled === 'boolean') state.settings.enabled = body.enabled
+          if (typeof body.style === 'string' && AI_STYLE_PROMPTS[body.style]) state.settings.style = body.style
+          if (typeof body.corpus === 'string') state.settings.corpus = body.corpus.slice(0, 4000)
+          if (typeof body.preset === 'string') state.settings.preset = body.preset
+          saveHistory()
+        }
+        return { ok: true, settings: state.settings }
       }),
     ],
     [
@@ -819,28 +1060,46 @@ export function apply(ctx) {
     [
       '/aramkit-live/review',
       route(async (url, body) => {
-        let gameId = url.searchParams.get('gameId')
-        const style = String(body?.style || url.searchParams.get('style') || 'sharp')
+        const gameIdParam = String(body?.gameId || url.searchParams.get('gameId') || '').trim()
+        const force = body?.force === true || url.searchParams.get('force') === '1'
         const presetId = String(body?.preset || url.searchParams.get('preset') || '').trim()
         const preset = CORPUS_PRESETS.find((row) => row.id === presetId)
-        const corpus = String(body?.corpus || preset?.corpus || url.searchParams.get('corpus') || '').trim().slice(0, 4000)
-        let postgame = lastPostgame
-        if (!postgame || !postgame.augmentsReady || (gameId && String(postgame.gameId) !== String(gameId))) {
-          const eog = await getEogStatsBlock()
-          if (!eog) throw new Error('还没有可用的结算数据')
-          postgame = await buildPostgame(eog)
-          lastEog = eog
-          lastPostgame = postgame
-          lastPostgameAt = Date.now()
+        const stored = loadHistory().settings
+        const styleInput = String(body?.style || url.searchParams.get('style') || stored.style || 'sharp')
+        const style = AI_STYLE_PROMPTS[styleInput] ? styleInput : 'sharp'
+        const corpus = String(body?.corpus || preset?.corpus || url.searchParams.get('corpus') || stored.corpus || '')
+          .trim()
+          .slice(0, 4000)
+        let entry = gameIdParam ? findHistoryEntry(gameIdParam) : null
+        if (!entry?.postgame) {
+          let postgame = lastPostgame
+          if (!postgame || (gameIdParam && String(postgame.gameId) !== gameIdParam)) {
+            const eog = await getEogStatsBlock()
+            if (!eog) throw new Error('还没有可用的结算数据')
+            postgame = await buildPostgame(eog)
+            lastEog = eog
+            lastPostgame = postgame
+            lastPostgameAt = Date.now()
+          }
+          if (!postgame.augmentsReady) {
+            throw new Error('结算数据已到，但 match history 还没生成海克斯明细，请稍等几秒再试')
+          }
+          entry = recordPostgame(postgame)
         }
-        if (!postgame.augmentsReady) throw new Error('结算数据已到，但 match history 还没生成海克斯明细，请稍等几秒再试')
-        gameId = String(postgame.gameId)
-        const cacheKey = `${gameId}:${createHash('sha1').update(`${style}\n${corpus}`).digest('hex').slice(0, 12)}`
-        const cached = aiCache.get(cacheKey)
-        if (cached && Date.now() - cached.at < AI_TTL) return { ok: true, review: cached.value, cached: true }
-        const review = await generateReview(ctx, postgame, { style, corpus })
-        aiCache.set(cacheKey, { at: Date.now(), value: review })
-        return { ok: true, review, cached: false }
+        if (!entry) throw new Error('还没有可用的结算数据')
+        if (!entry.postgame?.augmentsReady) {
+          throw new Error('这一局的海克斯明细还没同步，请稍等几秒再试')
+        }
+        const same = entry.reviewStatus === 'ready' && entry.reviewStyle === style && entry.reviewCorpusHash === corpusHash(corpus)
+        if (!force && entry.review && same) {
+          return { ok: true, review: entry.review, cached: true, gameId: entry.gameId }
+        }
+        const state = loadHistory()
+        state.settings = { ...state.settings, enabled: state.settings.enabled, style, corpus, preset: presetId || state.settings.preset }
+        saveHistory()
+        await startReviewJob(entry, { style, corpus })
+        if (entry.reviewStatus !== 'ready') throw new Error(entry.reviewError || 'AI 锐评失败')
+        return { ok: true, review: entry.review, cached: false, gameId: entry.gameId }
       }),
     ],
   ]

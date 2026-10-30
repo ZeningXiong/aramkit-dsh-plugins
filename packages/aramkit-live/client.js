@@ -118,6 +118,30 @@ window.__ModuleLoader__.load({
       vision: '视野',
       kda: 'KDA',
       aiReview: 'AI 锐评',
+      tabLive: '本局',
+      tabHistory: '对局记录',
+      historyTitle: '对局记录',
+      historyHint: '保留最近 24 小时，开下一局也不会消失',
+      historyEmpty: '今天还没有记录。打完一局后会自动出现在这里。',
+      historyToday: '今天',
+      historyCount: '局',
+      historyBack: '返回列表',
+      historyRefresh: '刷新',
+      historyLoading: '读取记录中…',
+      historyError: '读取对局记录失败',
+      historyDetailLoading: '读取这局数据…',
+      historyNotFound: '这局记录不在了，可能已超过 24 小时。',
+      reviewGenerating: 'AI 正在生成锐评。可以先去匹配，生成完会保存在这条记录里。',
+      reviewPending: '这一局还没有锐评。',
+      reviewOff: 'AI 锐评已关闭，可以手动生成一次。',
+      reviewRetry: '重新锐评',
+      reviewGenerate: '生成锐评',
+      reviewFailed: '锐评生成失败',
+      reviewReadyAt: '生成于',
+      statusGenerating: '生成中',
+      statusReady: '已锐评',
+      statusError: '生成失败',
+      statusIdle: '未锐评',
       aiLoading: 'AI 正在锐评这局友方五人…',
       aiError: 'AI 锐评失败',
       retryAi: '重新锐评',
@@ -376,6 +400,36 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
 .ol-spinner{width:14px;height:14px;border:2px solid color-mix(in srgb,currentColor 25%,transparent);border-top-color:currentColor;border-radius:50%;animation:ol-spin .7s linear infinite}
 @keyframes ol-spin{to{transform:rotate(360deg)}}
 .ol-foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:10px;color:var(--dsw-alias-label-secondary);margin-top:16px;line-height:1.6}
+.ol-tabs{display:flex;gap:4px;margin:12px 0 6px;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.ol-tab{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;font-weight:650;padding:9px 12px;border-bottom:2px solid transparent;cursor:pointer;border-radius:8px 8px 0 0}
+.ol-tab:hover{color:var(--dsw-alias-label-primary);background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 65%,transparent)}
+.ol-tab.active{color:var(--dsw-alias-label-primary);border-bottom-color:var(--dsw-alias-brand-primary)}
+.ol-tab-badge{min-width:17px;height:17px;padding:0 5px;border-radius:9px;background:color-mix(in srgb,var(--dsw-alias-brand-primary) 18%,transparent);color:var(--dsw-alias-brand-primary);font-size:10px;display:inline-flex;align-items:center;justify-content:center}
+.ol-history{margin-top:12px}
+.ol-history-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+.ol-history-head h2{margin:0 0 3px;font-size:16px}
+.ol-history-list{display:flex;flex-direction:column;gap:6px}
+.ol-history-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;font:inherit;cursor:pointer;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);border-radius:12px;padding:9px 11px;transition:border-color .15s,background .15s}
+.ol-history-item:hover{border-color:var(--dsw-alias-border-l2);background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 72%,var(--dsw-alias-bg-base))}
+.ol-history-result{flex:0 0 auto;width:22px;height:22px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#0d1218;background:#63d99d}
+.ol-history-item.loss .ol-history-result{background:#ff8a8a}
+.ol-history-main{flex:1 1 auto;min-width:0}
+.ol-history-line{display:flex;align-items:center;gap:7px;min-width:0}
+.ol-history-line img{width:26px;height:26px;border-radius:6px;object-fit:cover}
+.ol-history-line strong{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ol-history-time{font-size:10px;color:var(--dsw-alias-label-secondary);margin-left:auto;white-space:nowrap}
+.ol-history-meta{display:flex;align-items:center;gap:10px;margin-top:3px;font-size:10px;color:var(--dsw-alias-label-secondary);min-width:0}
+.ol-history-summary{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ol-history-status{flex:0 0 auto;font-size:10px;padding:3px 8px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary);white-space:nowrap}
+.ol-history-status.ok{color:#63d99d;border-color:color-mix(in srgb,#63d99d 35%,transparent)}
+.ol-history-status.busy{color:#eab55d;border-color:color-mix(in srgb,#eab55d 35%,transparent)}
+.ol-history-status.bad{color:#ff8a8a;border-color:color-mix(in srgb,#ff7373 38%,transparent)}
+.ol-history-detail-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.ol-history-detail-head .ol-post-title{font-size:20px}
+.ol-post-title.loss{color:#ff8a8a}
+.ol-history-review{margin-top:10px}
+.ol-history-review-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
+.ol-history-review-empty{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 0}
 @media (max-width:1050px){.ol-live-grid,.ol-reco{grid-template-columns:1fr}.ol-team{grid-template-columns:repeat(3,minmax(0,1fr))}.ol-review-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.ol-ingame-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:720px){.ol-page{padding:18px 14px 40px}.ol-header{flex-direction:column}.ol-team{grid-template-columns:repeat(2,minmax(0,1fr))}.ol-review-grid{grid-template-columns:1fr}.ol-ingame-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.ol-post-head{flex-direction:column;align-items:flex-start}.ol-table{font-size:10px}}
 `
@@ -771,6 +825,77 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
       )
     }
 
+    function AlliesTable({ data }) {
+      return h('div', { style: { overflowX: 'auto' } },
+        h('table', { className: 'ol-table' },
+          h('thead', null,
+            h('tr', null,
+              h('th', null, '英雄'),
+              h('th', null, TEXT.kda),
+              h('th', null, TEXT.damage),
+              h('th', null, TEXT.damageTaken),
+              h('th', null, TEXT.gold),
+              h('th', null, TEXT.healing),
+              h('th', null, TEXT.augments),
+            ),
+          ),
+          h('tbody', null,
+            data.allies.map((row, index) =>
+              h('tr', { key: index },
+                h('td', null,
+                  h('div', { className: 'ol-table-champ' },
+                    h(Img, { src: row.champion.icon, alt: row.champion.name, size: 28 }),
+                    h('div', null,
+                      h('div', { className: 'ol-table-name' }, row.champion.name),
+                      h('div', { className: 'ol-table-tag' }, row.gameName || '未知玩家'),
+                    ),
+                  ),
+                ),
+                h('td', null, `${row.kills}/${row.deaths}/${row.assists}`),
+                h('td', null, compact(row.damage)),
+                h('td', null, compact(row.damageTaken)),
+                h('td', null, compact(row.gold)),
+                h('td', null, compact(row.healing)),
+                h('td', null,
+                  row.augments?.length
+                    ? h('div', { className: 'ol-aug-icons' },
+                        row.augments.map((augment) =>
+                          h('img', {
+                            key: augment.id,
+                            src: augment.icon,
+                            alt: augment.name,
+                            title: `${augment.name} · ${augment.rarityLabel}\n${augment.description || '暂无描述'}`,
+                            loading: 'lazy',
+                          }),
+                        ),
+                      )
+                    : h('span', { className: 'ol-hint' }, data.augmentsReady ? '—' : '同步中…'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      )
+    }
+
+    function ReviewCards({ review }) {
+      return h('div', null,
+        review.summary ? h('div', { className: 'ol-review-summary' }, review.summary) : null,
+        h('div', { className: 'ol-review-grid' },
+          (review.players || []).map((row, index) =>
+            h('div', { className: 'ol-review-card', key: index },
+              h('span', { className: `ol-verdict ${row.verdict || ''}` }, row.verdict || TEXT.verdict),
+              h('div', { className: 'ol-review-name' }, row.name || '—'),
+              h('div', { className: 'ol-review-champ' }, row.champion || ''),
+              row.title ? h('div', { className: 'ol-review-title' }, row.title) : null,
+              row.comment ? h('div', { className: 'ol-review-comment' }, row.comment) : null,
+              Number.isFinite(Number(row.score)) ? h('div', { className: 'ol-review-score' }, `${TEXT.score} ${row.score}`) : null,
+            ),
+          ),
+        ),
+      )
+    }
+
     function PostgameView({ data }) {
       const [review, setReview] = useState(null)
       const [loading, setLoading] = useState(false)
@@ -902,56 +1027,7 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
         ),
         h('div', { className: 'ol-card' },
           h('div', { className: 'ol-section-head' }, h('h2', null, TEXT.allAllies)),
-          h('div', { style: { overflowX: 'auto' } },
-            h('table', { className: 'ol-table' },
-              h('thead', null,
-                h('tr', null,
-                  h('th', null, '英雄'),
-                  h('th', null, TEXT.kda),
-                  h('th', null, TEXT.damage),
-                  h('th', null, TEXT.damageTaken),
-                  h('th', null, TEXT.gold),
-                  h('th', null, TEXT.healing),
-                  h('th', null, TEXT.augments),
-                ),
-              ),
-              h('tbody', null,
-                data.allies.map((row, index) =>
-                  h('tr', { key: index },
-                    h('td', null,
-                      h('div', { className: 'ol-table-champ' },
-                        h(Img, { src: row.champion.icon, alt: row.champion.name, size: 28 }),
-                        h('div', null,
-                          h('div', { className: 'ol-table-name' }, row.champion.name),
-                          h('div', { className: 'ol-table-tag' }, row.gameName || '未知玩家'),
-                        ),
-                      ),
-                    ),
-                    h('td', null, `${row.kills}/${row.deaths}/${row.assists}`),
-                    h('td', null, compact(row.damage)),
-                    h('td', null, compact(row.damageTaken)),
-                    h('td', null, compact(row.gold)),
-                    h('td', null, compact(row.healing)),
-                    h('td', null,
-                      row.augments?.length
-                        ? h('div', { className: 'ol-aug-icons' },
-                            row.augments.map((augment) =>
-                              h('img', {
-                                key: augment.id,
-                                src: augment.icon,
-                                alt: augment.name,
-                                title: `${augment.name} · ${augment.rarityLabel}\n${augment.description || '暂无描述'}`,
-                                loading: 'lazy',
-                              }),
-                            ),
-                          )
-                        : h('span', { className: 'ol-hint' }, data.augmentsReady ? '—' : '同步中…'),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
+          h(AlliesTable, { data }),
         ),
         h('details', { className: 'ol-settings' },
           h('summary', null, TEXT.aiSettings),
@@ -1005,23 +1081,122 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
           loading ? h('div', { className: 'ol-loading' }, h('span', { className: 'ol-spinner' }), TEXT.aiLoading) : null,
           error ? h('div', { className: 'ol-error' }, `${TEXT.aiError}：${error}`) : null,
           review ? h('div', null,
-            review.summary ? h('div', { className: 'ol-review-summary' }, review.summary) : null,
-            h('div', { className: 'ol-review-grid' },
-              (review.players || []).map((row, index) =>
-                h('div', { className: 'ol-review-card', key: index },
-                  h('span', { className: `ol-verdict ${row.verdict || ''}` }, row.verdict || TEXT.verdict),
-                  h('div', { className: 'ol-review-name' }, row.name || '—'),
-                  h('div', { className: 'ol-review-champ' }, row.champion || ''),
-                  row.title ? h('div', { className: 'ol-review-title' }, row.title) : null,
-                  row.comment ? h('div', { className: 'ol-review-comment' }, row.comment) : null,
-                  Number.isFinite(Number(row.score)) ? h('div', { className: 'ol-review-score' }, `${TEXT.score} ${row.score}`) : null,
-                ),
-              ),
-            ),
+            h(ReviewCards, { review }),
             review.raw && (!review.players || !review.players.length) ? h('div', { className: 'ol-review-summary' }, review.raw) : null,
-            review.model ? h('div', { className: 'ol-hint', style: { marginTop: '8px' } }, review.model) : null,
           ) : null,
         ),
+      )
+    }
+
+    function historyStatusMeta(entry) {
+      if (entry.reviewStatus === 'generating') return { cls: 'busy', label: TEXT.statusGenerating }
+      if (entry.reviewStatus === 'ready') return { cls: 'ok', label: TEXT.statusReady }
+      if (entry.reviewStatus === 'error') return { cls: 'bad', label: TEXT.statusError }
+      return { cls: '', label: TEXT.statusIdle }
+    }
+
+    function clockOf(ts) {
+      const d = new Date(ts)
+      const p = (n) => String(n).padStart(2, '0')
+      return `${p(d.getHours())}:${p(d.getMinutes())}`
+    }
+
+    function dayLabel(dateKey, today) {
+      if (!dateKey) return ''
+      if (today && dateKey === today) return TEXT.historyToday
+      return dateKey.slice(5)
+    }
+
+    function HistoryList({ entries, today, onOpen }) {
+      return h('div', { className: 'ol-history-list' },
+        entries.map((entry) => {
+          const status = historyStatusMeta(entry)
+          return h('button', {
+            key: entry.gameId,
+            type: 'button',
+            className: `ol-history-item${entry.win ? ' win' : ' loss'}`,
+            onClick: () => onOpen(entry.gameId),
+          },
+            h('span', { className: 'ol-history-result' }, entry.win ? 'W' : 'L'),
+            h('div', { className: 'ol-history-main' },
+              h('div', { className: 'ol-history-line' },
+                h(Img, { src: entry.me?.champion?.icon, alt: entry.me?.champion?.name || '', size: 26 }),
+                h('strong', null, entry.me?.champion?.name || '未知英雄'),
+                h('span', { className: 'ol-history-time' }, `${dayLabel(entry.date, today)} ${clockOf(entry.capturedAt)}`),
+              ),
+              h('div', { className: 'ol-history-meta' },
+                h('span', null, entry.me ? `${entry.me.kills}/${entry.me.deaths}/${entry.me.assists}` : '—'),
+                h('span', null, time(entry.gameLength)),
+                entry.reviewSummary ? h('span', { className: 'ol-history-summary' }, entry.reviewSummary) : null,
+              ),
+            ),
+            h('span', { className: `ol-history-status ${status.cls}` }, status.label),
+          )
+        }),
+      )
+    }
+
+    function HistoryReview({ entry, onRetry, busy }) {
+      if (entry.review && entry.reviewStatus === 'ready') {
+        return h('div', null,
+          h(ReviewCards, { review: entry.review }),
+          h('div', { className: 'ol-history-review-foot' },
+            entry.reviewAt
+              ? h('span', { className: 'ol-hint' }, `${TEXT.reviewReadyAt} ${dayLabel(entry.date, '')} ${clockOf(entry.reviewAt)}`)
+              : null,
+            onRetry ? h('button', { type: 'button', className: 'ol-btn', onClick: onRetry, disabled: busy }, busy ? TEXT.loading : TEXT.reviewRetry) : null,
+          ),
+        )
+      }
+      if (entry.reviewStatus === 'generating') {
+        return h('div', { className: 'ol-loading' }, h('span', { className: 'ol-spinner' }), TEXT.reviewGenerating)
+      }
+      return h('div', { className: 'ol-history-review-empty' },
+        h('div', { className: 'ol-hint' }, entry.reviewStatus === 'error' ? `${TEXT.reviewFailed}：${entry.reviewError || '未知错误'}` : TEXT.reviewPending),
+        h('button', { type: 'button', className: 'ol-btn primary', onClick: onRetry, disabled: busy }, busy ? TEXT.loading : TEXT.reviewGenerate),
+      )
+    }
+
+    function HistoryDetail({ entry, onBack, onRetry, busy }) {
+      const postgame = entry.postgame
+      const status = historyStatusMeta(entry)
+      return h('div', { className: 'ol-history-detail' },
+        h('div', { className: 'ol-history-detail-head' },
+          h('button', { type: 'button', className: 'ol-btn', onClick: onBack }, `← ${TEXT.historyBack}`),
+          h('div', { className: `ol-post-title${entry.win ? '' : ' loss'}` }, entry.win ? TEXT.win : TEXT.loss),
+          h('div', { className: 'ol-post-meta' }, `${dayLabel(entry.date, '')} ${clockOf(entry.capturedAt)} · ${TEXT.duration} ${time(entry.gameLength)} · ${TEXT.gameId} ${entry.gameId}`),
+        ),
+        postgame ? h('div', { className: 'ol-card' },
+          h('div', { className: 'ol-section-head' }, h('h2', null, TEXT.allAllies)),
+          h(AlliesTable, { data: postgame }),
+        ) : null,
+        h('div', { className: 'ol-card ol-history-review' },
+          h('div', { className: 'ol-section-head' },
+            h('h2', null, TEXT.aiReview),
+            h('span', { className: `ol-history-status ${status.cls}` }, status.label),
+          ),
+          h(HistoryReview, { entry, onRetry, busy }),
+        ),
+      )
+    }
+
+    function HistoryView({ entries, today, openEntry, loading, error, onOpen, onBack, onRefresh, onRetry, busy }) {
+      return h('div', { className: 'ol-history' },
+        h('div', { className: 'ol-history-head' },
+          h('div', null,
+            h('h2', null, TEXT.historyTitle),
+            h('span', { className: 'ol-hint' }, `${TEXT.historyHint}${entries.length ? ` · ${entries.length} ${TEXT.historyCount}` : ''}`),
+          ),
+          h('button', { type: 'button', className: 'ol-btn', onClick: onRefresh }, TEXT.historyRefresh),
+        ),
+        error ? h('div', { className: 'ol-error' }, `${TEXT.historyError}：${error}`) : null,
+        openEntry
+          ? h(HistoryDetail, { entry: openEntry, onBack, onRetry, busy })
+          : loading && !entries.length
+            ? h('div', { className: 'ol-loading' }, h('span', { className: 'ol-spinner' }), TEXT.historyLoading)
+            : entries.length
+              ? h(HistoryList, { entries, today, onOpen })
+              : h('div', { className: 'ol-empty' }, h('strong', null, TEXT.historyEmpty)),
       )
     }
 
@@ -1110,6 +1285,16 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
       })
       const presets = useCorpusPresets()
       const [aiSettingsOpen, setAiSettingsOpen] = useState(false)
+      const [tab, setTab] = useState('live')
+      const [history, setHistory] = useState(null)
+      const [historyError, setHistoryError] = useState('')
+      const [historyLoading, setHistoryLoading] = useState(true)
+      const [openGameId, setOpenGameId] = useState('')
+      const [historyDetail, setHistoryDetail] = useState(null)
+      const [detailLoading, setDetailLoading] = useState(false)
+      const [reviewBusy, setReviewBusy] = useState(false)
+      const autoOpenedGame = useRef('')
+      const settingsSynced = useRef(false)
 
       useEffect(() => {
         try {
@@ -1188,6 +1373,116 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
         } catch {}
         window.dispatchEvent(new CustomEvent(AI_EVENT, { detail: value }))
       }, [])
+
+      const loadHistoryList = useCallback(async () => {
+        try {
+          const payload = await getJson('history')
+          setHistory(payload)
+          setHistoryError('')
+          return payload
+        } catch (err) {
+          setHistoryError(err instanceof Error ? err.message : String(err))
+          return null
+        } finally {
+          setHistoryLoading(false)
+        }
+      }, [])
+
+      const loadDetail = useCallback(async (gameId) => {
+        if (!gameId) return
+        setDetailLoading(true)
+        try {
+          const payload = await getJson('history-detail', { gameId })
+          setHistoryDetail(payload.entry)
+          setHistoryError('')
+        } catch (err) {
+          setHistoryError(err instanceof Error ? err.message : String(err))
+        } finally {
+          setDetailLoading(false)
+        }
+      }, [])
+
+      const openGame = useCallback((gameId) => {
+        setOpenGameId(String(gameId))
+        setHistoryDetail(null)
+        loadDetail(gameId)
+      }, [loadDetail])
+
+      const retryReview = useCallback(async () => {
+        if (!openGameId) return
+        setReviewBusy(true)
+        try {
+          await getJson('review', { gameId: openGameId }, {
+            style: aiStyle,
+            corpus: aiCorpus,
+            preset: aiCorpusPreset,
+            force: true,
+          })
+          await loadDetail(openGameId)
+          await loadHistoryList()
+        } catch (err) {
+          setHistoryError(err instanceof Error ? err.message : String(err))
+          await loadDetail(openGameId).catch(() => {})
+        } finally {
+          setReviewBusy(false)
+        }
+      }, [openGameId, aiStyle, aiCorpus, aiCorpusPreset, loadDetail, loadHistoryList])
+
+      // 把 AI 设置同步给宿主，后台生成锐评时用同一套风格/语料
+      useEffect(() => {
+        const send = () => getJson('ai-settings', null, {
+          enabled: aiEnabled,
+          style: aiStyle,
+          corpus: aiCorpus,
+          preset: aiCorpusPreset,
+        }).catch(() => {})
+        if (!settingsSynced.current) {
+          settingsSynced.current = true
+          send()
+          return undefined
+        }
+        const timer = setTimeout(send, 400)
+        return () => clearTimeout(timer)
+      }, [aiEnabled, aiStyle, aiCorpus, aiCorpusPreset])
+
+      useEffect(() => {
+        loadHistoryList()
+      }, [loadHistoryList])
+
+      // 结算面板一出现就跳到对局记录，并打开这一局
+      useEffect(() => {
+        const gameId = state?.postgame?.gameId ? String(state.postgame.gameId) : ''
+        if (!gameId || autoOpenedGame.current === gameId) return
+        autoOpenedGame.current = gameId
+        setAiSettingsOpen(false)
+        setTab('history')
+        setOpenGameId(gameId)
+        setHistoryDetail(null)
+        loadDetail(gameId)
+      }, [state?.postgame?.gameId, loadDetail])
+
+      // 对局记录页轮询，锐评生成中会自动刷新
+      useEffect(() => {
+        if (tab !== 'history') return
+        let alive = true
+        let timer = null
+        const tick = async () => {
+          await loadHistoryList()
+          if (!alive) return
+          if (openGameId) {
+            try {
+              const payload = await getJson('history-detail', { gameId: openGameId })
+              if (alive) setHistoryDetail(payload.entry)
+            } catch {}
+          }
+          if (alive) timer = setTimeout(tick, 2500)
+        }
+        tick()
+        return () => {
+          alive = false
+          if (timer) clearTimeout(timer)
+        }
+      }, [tab, openGameId, loadHistoryList])
 
       const poll = useCallback(async (force = false) => {
         try {
@@ -1308,6 +1603,21 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
               h('button', { type: 'button', className: 'ol-btn', onClick: () => { setRefreshing(true); poll(true) }, disabled: refreshing }, refreshing ? TEXT.loading : TEXT.retry),
             ),
           ),
+          h('div', { className: 'ol-tabs' },
+            h('button', {
+              type: 'button',
+              className: `ol-tab${tab === 'live' ? ' active' : ''}`,
+              onClick: () => setTab('live'),
+            }, TEXT.tabLive),
+            h('button', {
+              type: 'button',
+              className: `ol-tab${tab === 'history' ? ' active' : ''}`,
+              onClick: () => { setTab('history'); setHistoryLoading(true); loadHistoryList() },
+            },
+              TEXT.tabHistory,
+              history?.entries?.length ? h('span', { className: 'ol-tab-badge' }, history.entries.length) : null,
+            ),
+          ),
           error ? h('div', { className: 'ol-error' }, error) : null,
           aiSettingsOpen
             ? h(AiSettingsPanel, {
@@ -1323,7 +1633,20 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
                 onClose: () => setAiSettingsOpen(false),
               })
             : null,
-          state?.connected === false
+          tab === 'history'
+            ? h(HistoryView, {
+                entries: history?.entries || [],
+                today: history?.today || '',
+                openEntry: historyDetail,
+                loading: historyLoading || detailLoading,
+                error: historyError,
+                onOpen: openGame,
+                onBack: () => { setOpenGameId(''); setHistoryDetail(null) },
+                onRefresh: () => { setHistoryLoading(true); loadHistoryList() },
+                onRetry: retryReview,
+                busy: reviewBusy,
+              })
+            : state?.connected === false
             ? h('div', null,
                 h('div', { className: 'ol-empty' },
                   h('strong', null, TEXT.offlineTitle),
