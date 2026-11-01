@@ -310,7 +310,7 @@ async function getRatingCached(summoner) {
   return value
 }
 
-async function buildChampSelect(session, currentSummoner, phase) {
+async function buildChampSelect(session, currentSummoner, phase, { includeRatings = true } = {}) {
   const [lookup, resources] = await Promise.all([getChampionLookup('all'), getResources()])
   const championById = lookup.byId
   const myTeam = Array.isArray(session.myTeam) ? session.myTeam : []
@@ -321,7 +321,9 @@ async function buildChampSelect(session, currentSummoner, phase) {
     myTeam.map(async (member) => {
       const summoner = member.summonerId ? await getSummonerById(member.summonerId) : null
       const champion = championById.get(Number(member.championId)) ?? null
-      const rating = summoner ? await getRatingCached(summoner) : { ok: false, error: '无法读取队友' }
+      const rating = !includeRatings
+        ? { ok: false, error: '未查询隐藏分（按需启用 includeRatings）' }
+        : summoner ? await getRatingCached(summoner) : { ok: false, error: '无法读取队友' }
       return {
         cellId: member.cellId,
         summonerId: member.summonerId ?? 0,
@@ -451,27 +453,35 @@ function buildInGameFromCache() {
   }
 }
 
-async function buildInGameFromLive() {
-  const live = await getLiveGameData()
+async function buildInGameFromLive(liveData) {
+  const live = liveData ?? await getLiveGameData()
   if (!live) return null
   const [lookup, resources] = await Promise.all([getChampionLookup('all'), getResources()])
   const allPlayers = Array.isArray(live.allPlayers) ? live.allPlayers : []
   if (!allPlayers.length) return null
-  const activeName = live.activePlayer?.summonerName || live.activePlayer?.riotIdGameName || ''
-  const self = allPlayers.find((row) => row.summonerName === activeName) || null
+  const identity = (row) => row?.riotId || (row?.riotIdGameName && row?.riotIdTagLine ? `${row.riotIdGameName}#${row.riotIdTagLine}` : row?.summonerName || row?.riotIdGameName || '')
+  const activeName = identity(live.activePlayer)
+  const self = activeName ? allPlayers.find((row) => identity(row) === activeName) || null : null
   const team = self?.team
-  const players = (team ? allPlayers.filter((row) => row.team === team) : allPlayers).slice(0, 5)
+  // Do not label an arbitrary first five players as allies if identity is missing.
+  const players = team ? allPlayers.filter((row) => row.team === team).slice(0, 5) : []
   return {
     active: true,
     source: 'live',
     gameMode: live.gameData?.gameMode || 'KIWI',
     gameTime: live.gameData?.gameTime ?? null,
+    ...(team ? {} : { message: '局内数据已连接，但无法确定本机玩家及友方队伍。' }),
     allies: players.map((row) => {
       const champion = resolveLiveChampion(resources, lookup, row)
       return {
         gameName: row.summonerName || row.riotIdGameName || '',
         tagLine: '',
-        isSelf: row.summonerName === activeName,
+        isSelf: row === self,
+        kills: num(row.scores?.kills),
+        deaths: num(row.scores?.deaths),
+        assists: num(row.scores?.assists),
+        cs: num(row.scores?.creepScore),
+        level: num(row.level),
         championId: champion?.id || Number(row.championId) || 0,
         champion: champion
           ? { id: champion.id, name: champion.name, title: champion.title, icon: champion.icon }
@@ -591,12 +601,14 @@ async function buildPostgame(eog) {
   const resources = await getResources()
   const entries = extractEogPlayers(eog)
   const players = entries.map((entry) => normalizeEogPlayer(entry, lookup, resources))
-  const local = players.find((row) => row.isLocalPlayer) ?? null
-  const localTeamId = local?.teamId ?? 100
+  const current = await getCurrentSummoner()
+  const local = players.find((row) => row.isLocalPlayer) ?? players.find((row) => row.puuid && row.puuid === current?.puuid) ?? null
+  if (!local) throw new Error('结算数据无法确定本机玩家，暂不推断友方队伍，请稍后重试。')
+  local.isLocalPlayer = true
+  const localTeamId = local.teamId
   const allies = players.filter((row) => row.teamId === localTeamId).slice(0, 5)
   let matchGame = null
   try {
-    const current = await getCurrentSummoner()
     if (current?.puuid) matchGame = await getLatestMatchForPuuid(current.puuid, eog.gameId)
   } catch {}
   const identities = Array.isArray(matchGame?.participantIdentities) ? matchGame.participantIdentities : []
@@ -894,6 +906,7 @@ export const inject = ['webServer', 'llm', 'agentDefaultModel']
 export {
   buildChampSelect,
   buildPostgame,
+  buildInGameFromLive,
   formatReviewData,
   generateReview,
   recordPostgame,

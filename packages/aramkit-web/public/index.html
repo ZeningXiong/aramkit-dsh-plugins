@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>海斗助手 · 海克斯大乱斗</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="海斗助手首页"><img src="/icon.svg" alt=""><span>海斗助手<small>ARAM COMPANION</small></span></a>
+    <div class="nav-label">你的大乱斗工具箱</div>
+    <nav aria-label="主导航">
+      <button data-view="champions" class="nav-item active"><span class="nav-icon">◈</span> 英雄出装 <span class="nav-arrow">↗</span></button>
+      <button data-view="augments" class="nav-item"><span class="nav-icon">✧</span> 海克斯图鉴</button>
+      <button data-view="live" class="nav-item"><span class="nav-icon">◉</span> 我的对局 <i id="nav-dot"></i></button>
+      <button id="review-nav" class="nav-item"><span class="nav-icon">✦</span> 赛后锐评</button>
+      <button data-view="rating" class="nav-item"><span class="nav-icon">▥</span> 隐藏分查询</button>
+    </nav>
+    <div class="sidebar-note"><span class="note-glyph">⌁</span><strong>专注游戏，随时查询</strong><p>英雄推荐与客户端数据<br>都在这一个页面里。</p><span class="local-badge">● 本机独立运行</span></div>
+    <div class="sidebar-bottom"><button id="ai-settings" class="quiet">✧ AI 锐评设置</button><button id="connection-settings" class="quiet">⚙ 连接设置</button><button id="quit" class="quiet">⏻ 退出助手</button><p>数据来自 ARAMKit<br>社区项目 · 非官方游戏产品</p></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar"><div><span class="muted">海克斯大乱斗</span><span class="divider">/</span><span id="breadcrumb">英雄出装</span></div><div class="top-actions"><span id="version-badge" class="version-badge">正在获取版本</span><button id="connection-chip" class="connection-chip"><i></i><span>检测客户端…</span></button></div></header>
+    <main>
+      <section id="view-champions" class="view active">
+        <div class="page-heading"><div><div class="eyebrow">CHAMPION BUILDS</div><h1>英雄出装<span class="title-dot">.</span></h1><p>选对流派，找到适合你的海克斯与出装路线。</p></div><div class="segmented" id="dataset-tabs" aria-label="数据分段"><button data-dataset="all" class="active">全分段</button><button data-dataset="high">高分段</button></div></div>
+        <div class="build-layout">
+          <section class="champion-picker panel"><div class="picker-header"><label class="search-box"><span>⌕</span><input id="champion-search" placeholder="搜索英雄 / 称号 / 英文名" aria-label="搜索英雄"></label><div class="list-caption"><span id="champion-count">正在加载英雄…</span><span>按强度排序 ↓</span></div></div><div id="champion-list" class="champion-list" aria-live="polite"><div class="loading">正在读取最新英雄数据…</div></div></section>
+          <div id="champion-detail" class="champion-detail" aria-live="polite"><div class="panel loading tall">正在准备推荐配置…</div></div>
+        </div>
+      </section>
+      <section id="view-augments" class="view"><div class="page-heading"><div><div class="eyebrow">AUGMENT LIBRARY</div><h1>海克斯图鉴<span class="title-dot">.</span></h1><p>查询效果说明；具体英雄的胜率推荐可在「英雄出装」中查看。</p></div></div><div class="library-toolbar"><label class="search-box"><span>⌕</span><input id="augment-search" placeholder="输入海克斯名称或 ID" aria-label="搜索海克斯"></label><div class="segmented" id="rarity-filter"><button data-rarity="" class="active">全部</button><button data-rarity="prismatic">棱彩</button><button data-rarity="gold">黄金</button><button data-rarity="silver">白银</button></div></div><div id="augment-results" class="augment-library" aria-live="polite"></div></section>
+      <section id="view-live" class="view"><div class="page-heading"><div><div class="eyebrow">LIVE COMPANION</div><h1>我的对局<span class="title-dot">.</span></h1><p>自动跟随选人、局内和结算，在副屏也能随时查看。</p></div><button id="refresh-game" class="button secondary">↻ 立即刷新</button></div><div class="live-controls panel"><label class="switch-label"><input id="auto-refresh" type="checkbox" checked> 自动跟随客户端 <small>每 8 秒刷新</small></label><label class="switch-label"><input id="anonymous" type="checkbox" checked> 匿名显示</label><label class="switch-label"><input id="team-ratings" type="checkbox"> 查询队友隐藏分</label></div><div class="phase-track" id="phase-track"></div><div id="live-content" aria-live="polite"></div><div class="panel postgame-panel"><div class="section-title"><h2>赛后数据</h2><button id="load-postgame" class="text-button">读取最近结算 ↗</button></div><div id="postgame-content" class="muted empty-small">对局结束后自动显示友方数据。无需模型、无需登录其他应用。</div></div></section>
+      <section id="view-rating" class="view"><div class="page-heading"><div><div class="eyebrow">PLAYER INSIGHTS</div><h1>隐藏分查询<span class="title-dot">.</span></h1><p>查看 ARAMKit 根据海克斯大乱斗表现估算的玩家分数。</p></div></div><div class="rating-layout"><form id="rating-form" class="panel rating-form"><span class="large-glyph">▥</span><h2>这一局，你在哪个分段？</h2><p class="muted">输入国服 Riot ID，包含昵称和 # 后面的 Tag。</p><label for="riot-id">昵称 # Tag</label><input id="riot-id" placeholder="例如：召唤师#12345" required maxlength="150"><button class="button" type="submit">查询隐藏分 <span>↗</span></button><p class="fine-print">点击查询会将此昵称和 Tag 发送给 ARAMKit。<br>估算结果不是 Riot 官方 MMR，仅覆盖国服。</p></form><div id="rating-result" class="panel rating-result"><div class="empty-state"><span>⌁</span><h2>每一场表现，都有迹可循</h2><p>查询后在这里查看估算分数、误差与表现信息。</p></div></div></div></section>
+      <footer class="page-footer"><span>ARAMKit 数据 · 低样本推荐已过滤</span><span id="data-date">准备就绪后显示数据日期</span></footer>
+    </main>
+  </div>
+  <dialog id="settings-dialog"><div class="dialog-header"><h2>客户端连接</h2><button id="close-settings" class="icon-button" aria-label="关闭设置">×</button></div><p class="muted">助手会自动查找已登录的 LeagueClient。若未连接，可手动指定游戏目录中的 lockfile。</p><form id="connect-form"><label for="lockfile-path">LeagueClient lockfile 路径（可选）</label><input id="lockfile-path" placeholder="D:\WeGameApps\英雄联盟\LeagueClient\lockfile"><button class="button" type="submit">检测并连接</button></form><div id="connection-result" class="connection-result"></div><p class="fine-print">仅在本机读取客户端。不会修改游戏、自动选人或自动出装。</p></dialog>
+  <dialog id="ai-dialog"><div class="dialog-header"><h2>AI 锐评设置</h2><button id="close-ai-settings" class="icon-button" aria-label="关闭 AI 设置">×</button></div><p class="muted">连接 OpenAI 或兼容服务，生成本局友方五人的赛后点评。使用 API Key，不需要启动 Codex；费用由所选 API 服务单独结算。</p><form id="ai-config-form" autocomplete="off"><label for="ai-base-url">API 地址（Base URL）</label><input id="ai-base-url" type="url" value="https://api.openai.com/v1" required maxlength="1024"><div class="ai-form-row"><div><label for="ai-protocol">API 协议</label><select id="ai-protocol"><option value="responses">Responses（Codex / OpenAI）</option><option value="chat-completions">Chat Completions 兼容</option></select></div><div><label for="ai-model">模型名称</label><input id="ai-model" value="gpt-6.1-sol" placeholder="填写账户可用的模型 ID" required maxlength="150"></div></div><label for="ai-api-key">API Key</label><input id="ai-api-key" type="password" placeholder="粘贴服务商提供的 API Key" autocomplete="off" maxlength="4096"><label class="switch-label remember-key"><input id="ai-remember" type="checkbox" checked> 使用 Windows 加密，记住此密钥</label><p class="fine-print">密钥不会回显，不写入浏览器存储。已有密钥时留空可保留；更换 API 地址必须重新填写对应密钥。取消记住后仅在本次运行中使用。</p><div class="ai-form-actions"><button class="button" type="submit">保存配置</button><button id="test-ai" class="button secondary" type="button">校验连接</button></div></form><div id="ai-config-status" class="connection-result" role="status"></div><div class="ai-settings-footer"><a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">获取 OpenAI API Key ↗</a><button id="clear-ai-key" class="text-button">清除已保存密钥</button></div></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

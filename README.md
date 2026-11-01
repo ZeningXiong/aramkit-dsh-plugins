@@ -1,5 +1,9 @@
 # 海斗助手 · DSH 插件
 
+> **独立网页版 v0.2.1**：无需打开 Codex 或 DSH，支持英雄出装、海克斯、只读比赛数据及可选 OpenAI/兼容 API 五人锐评。源码版需要 Node.js 22+；自行制作的便携包可自带运行程序。安装与使用见 [packages/aramkit-web/README.md](packages/aramkit-web/README.md)。
+
+> **Codex MCP 适配版**：新增独立的本地 stdio MCP 服务，无需 DSH。英雄/海克斯查询、隐藏分、只读客户端状态和赛后复盘的安装说明见 [packages/aramkit-mcp/README.md](packages/aramkit-mcp/README.md)。原 DSH 插件仍可照常使用。
+
 ![海斗助手](assets/banner.svg)
 
 两个用于《英雄联盟》海克斯大乱斗（ARAM Mayhem）的 [DeepSeek Harness](https://github.com/deepseek-ai) Web UI 插件：
@@ -100,7 +104,7 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/<your-name>/aramkit-dsh-plugins.git
+git clone https://github.com/ZeningXiong/aramkit-dsh-plugins.git
 cd aramkit-dsh-plugins
 ```
 
