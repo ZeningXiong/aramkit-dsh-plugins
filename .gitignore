@@ -9,6 +9,8 @@ packages/aramkit-web/.local/
 **/.local/
 ai-settings.json
 recent-postgame.json
+history.json
+history.json.tmp
 *.key
 *.pem
 *.pfx

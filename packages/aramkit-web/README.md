@@ -31,6 +31,8 @@ node packages/aramkit-web/server.js
 3. **模型名称**：填写该密钥有权限使用的准确模型 ID。默认示例为 `gpt-6.1-sol`，不保证所有账户都能访问。
 4. **API Key**：在本机网页的密码输入框填写，不要发到聊天里。保存设置不会调用模型。「校验连接」仅查询模型列表，不等于完成一次推理验证。
 
+DeepSeek 等兼容服务选择 **Chat Completions**，填写服务商给出的 API Base URL、模型 ID 和该服务商的密钥即可。支持的是上述两种协议，不保证所有第三方模型都支持需要的 JSON 输出；测试通过的模拟响应不代表所有服务商均已实测。
+
 对局结束后先读取完整五人结算，再点击「生成五人锐评」。可选毒舌、教练、数据复盘、抽象四种风格。结果包含全队总结、每人标签、0–100 分、数据依据和改进建议。基础出装、海克斯和比赛数据功能仍不需要任何 API。
 
 - 手动触发，不会自动消费 API 额度；同一局同模型同风格结果缓存 30 分钟。重新生成会再次调用模型；失败不会自动重试。
@@ -90,4 +92,4 @@ node --test packages/aramkit-web/tests/*.test.js packages/aramkit-mcp/tests/*.te
 
 依托 [ZeningXiong/aramkit-dsh-plugins](https://github.com/ZeningXiong/aramkit-dsh-plugins) 修改，保留 MIT 许可与 ARAMKit 署名。Node 许可位于 `runtime/NODE-LICENSE.txt`。本项目不是 Riot、腾讯或 ARAMKit 官方产品。
 
-公开源码前可执行 `node scripts/check-publication.mjs`，检查 Git 暂存区是否误包含运行数据、凭据、个人目录或未经审核的二进制文件。测试数据均为人工构造，不包含真实玩家资料。
+公开源码前可执行 `node scripts/check-publication.mjs --all --base origin/main`，检查全部 Git 跟踪文件及待贡献的提交历史，防止误包含运行数据、凭据、个人目录或未经审核的二进制文件。测试数据均为人工构造，不包含真实玩家资料。
