@@ -11,10 +11,11 @@ $files = @(
   'packages\aramkit-web\ai-review.js', 'packages\aramkit-web\secret-store.js',
   'packages\aramkit-web\recent-postgame.js',
   'packages\aramkit-web\match-history.js',
+  'packages\aramkit-web\review-diagnostics.js',
   'packages\aramkit-web\public\index.html', 'packages\aramkit-web\public\app.js', 'packages\aramkit-web\public\style.css', 'packages\aramkit-web\public\icon.svg',
   'packages\aramkit-web\public\app.ico',
   'packages\aramkit-web\runtime\node.exe', 'packages\aramkit-web\runtime\NODE-LICENSE.txt',
-  'packages\aramkit-core\package.json', 'packages\aramkit-core\service.js',
+  'packages\aramkit-core\package.json', 'packages\aramkit-core\service.js', 'packages\aramkit-core\match-history.js',
   'packages\aramkit-live\package.json', 'packages\aramkit-live\index.js', 'packages\aramkit-live\data.js', 'packages\aramkit-live\lcu.js'
 )
 foreach ($relativeFile in $files) {

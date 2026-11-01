@@ -1,6 +1,7 @@
 import * as data from '../aramkit-live/data.js'
 import * as lcu from '../aramkit-live/lcu.js'
 import { buildChampSelect, buildPostgame, buildInGameFromLive, formatReviewData } from '../aramkit-live/index.js'
+import { recoverLatestPostgame } from './match-history.js'
 
 const models = { buildChampSelect, buildPostgame, buildInGameFromLive, formatReviewData }
 const POSTGAME_PHASES = new Set(['PreEndOfGame', 'EndOfGame', 'WaitingForStats'])
@@ -46,6 +47,21 @@ export function createService({ dataApi = data, lcuApi = lcu, modelApi = models,
   let cachedSelectionAt = 0
   let cachedPostgame = null
   let cachedPostgameAt = 0
+  let historyCheckedAt = -Infinity, historyPending = null
+
+  async function recoverHistory() {
+    if (historyPending) return historyPending
+    if (now() - historyCheckedAt < 30000) return
+    historyCheckedAt = now()
+    historyPending = (async () => {
+      const recovered = await recoverLatestPostgame({ lcuApi, modelApi, now })
+      if (recovered && String(cachedPostgame?.gameId) !== String(recovered.gameId)) {
+        cachedPostgame = recovered
+        cachedPostgameAt = now()
+      }
+    })().finally(() => { historyPending = null })
+    return historyPending
+  }
 
   async function connection() {
     const auth = await lcuApi.discoverLcu()
@@ -134,6 +150,8 @@ export function createService({ dataApi = data, lcuApi = lcu, modelApi = models,
       } else result.waiting = true
     } else if (state.phase === 'Lobby' || state.phase === 'None') {
       cachedSelection = null
+      await recoverHistory()
+      if (cachedPostgame && now() - cachedPostgameAt < 10 * 60 * 1000) result.postgame = cachedPostgame
     }
     return gameOutput(result, anonymize)
   }
@@ -143,7 +161,7 @@ export function createService({ dataApi = data, lcuApi = lcu, modelApi = models,
     if (eog) {
       cachedPostgame = await modelApi.buildPostgame(eog)
       cachedPostgameAt = now()
-    }
+    } else await recoverHistory()
     if (!cachedPostgame || now() - cachedPostgameAt > 10 * 60 * 1000) return { ok: false, error: '尚无可用结算数据。请在对局结束、结算页面仍可访问时查询。' }
     return { ok: true, cached: !eog, postgame: gameOutput(cachedPostgame, anonymize) }
   }

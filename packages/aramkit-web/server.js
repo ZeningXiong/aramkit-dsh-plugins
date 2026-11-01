@@ -7,6 +7,7 @@ import * as data from '../aramkit-live/data.js'
 import { createAiReview } from './ai-review.js'
 import { createPostgameStore } from './recent-postgame.js'
 import { createMatchHistoryStore } from './match-history.js'
+import { createReviewDiagnostics } from './review-diagnostics.js'
 
 const publicDir = new URL('./public/', import.meta.url)
 const staticFiles = new Map([
@@ -66,7 +67,7 @@ export function createApp({ service = createService(), dataApi = data, aiApi, ai
     const latest = (await historyStore.list())[0]
     return latest ? { ok: true, cached: true, restored: true, postgame: { ...(await historyStore.get(latest.gameId)).postgame, source: 'local-history' } } : result
   } }
-  const ai = aiApi || createAiReview({ ...aiOptions, service: reviewService, historyStore })
+  const ai = aiApi || createAiReview({ diagnostics: createReviewDiagnostics(), ...aiOptions, service: reviewService, historyStore })
   const csrf = randomBytes(24).toString('hex')
   const pending = new Map()
   // Multiple open tabs share in-flight reads instead of duplicating game/API requests.
@@ -114,7 +115,7 @@ export function createApp({ service = createService(), dataApi = data, aiApi, ai
       if (request.method !== 'GET') throw fail('不支持此操作。', 405)
       let result
       switch (url.pathname) {
-        case '/api/health': result = { ok: true, app: 'aramkit-web', version: '0.3.0', independent: true }; break
+        case '/api/health': result = { ok: true, app: 'aramkit-web', version: '0.3.1', independent: true }; break
         case '/api/history': {
           const legacy = await postgameStore.load()
           if (legacy) await historyStore.record(legacy)

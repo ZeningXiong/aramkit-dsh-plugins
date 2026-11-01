@@ -18,11 +18,12 @@
 ## 新增内容
 
 - `packages/aramkit-core`：供网页和 MCP 共用的英雄、海克斯、隐藏分、只读对局与匿名复盘服务。
+- `packages/aramkit-core/match-history.js`：离开结算后的只读比赛历史恢复，验证当前账号、比赛时效与完整五人详情，标明未知统计。
 - `packages/aramkit-web`：只监听 `127.0.0.1:3210` 的网页服务、浏览器界面、Windows 启动入口与便携包构建脚本。网页服务没有第三方运行依赖。
 - `packages/aramkit-mcp`：9 个 stdio 工具、Codex 注册脚本、锁定的 SDK 依赖和协议测试。
 - `scripts/check-publication.mjs`：检查跟踪文件、暂存内容及本地待贡献的提交历史。
 
-原 `aramkit-live/index.js` 的适配改动为：可选关闭选人隐藏分查询、导出局内数据函数、支持新 Riot ID 以及在无法识别本机玩家时拒绝猜测友方。原 DSH 的隐藏分默认行为和历史记录导出保留。
+原 `aramkit-live/index.js` 的适配改动为：可选关闭选人隐藏分查询、导出局内数据函数、支持新 Riot ID、在无法识别本机玩家时拒绝猜测友方，以及复用已读取的比赛详情。`lcu.js` 新增固定的只读比赛详情端点，供共享服务在结算接口清空后补读。原 DSH 的隐藏分默认行为和历史记录导出保留。
 
 ## API 兼容
 
@@ -38,7 +39,7 @@
 - 网页 AI 始终仅发送匿名友方统计，不发送昵称、Tag、PUUID、召唤师 ID 或游戏连接令牌。
 - 记住的网页 API Key 使用 Windows 当前账户 DPAPI 加密，密钥不回显给前端，也不进入浏览器存储、命令行或日志。
 - 源码不包含本机配置、真实比赛记录、API Key、游戏令牌、个人截图、绝对个人路径、桌面快捷方式、便携运行程序或 `node_modules`。
-- `history.json`、`match-history.json` 及临时文件同样排除；上游 DSH 记录与网页匿名记录分别留在使用者本机。
+- `history.json`、`match-history.json`、`review-error.json` 及临时文件同样排除；上游 DSH 记录、网页匿名记录和脱敏诊断分别留在使用者本机。
 
 发布检查读取 Git 中实际跟踪的内容，不会读取被忽略的个人设置。规则扫描不能识别所有形式的个人信息，发布前仍应人工审阅完整差异与提交署名。
 

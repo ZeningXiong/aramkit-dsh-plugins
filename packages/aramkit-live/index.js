@@ -596,20 +596,20 @@ function normalizeEogPlayer(entry, lookup, resources) {
   }
 }
 
-async function buildPostgame(eog) {
+async function buildPostgame(eog, { currentSummoner, matchGame: providedMatch } = {}) {
   const lookup = await getChampionLookup('all')
   const resources = await getResources()
   const entries = extractEogPlayers(eog)
   const players = entries.map((entry) => normalizeEogPlayer(entry, lookup, resources))
-  const current = await getCurrentSummoner()
+  const current = currentSummoner ?? await getCurrentSummoner()
   const local = players.find((row) => row.isLocalPlayer) ?? players.find((row) => row.puuid && row.puuid === current?.puuid) ?? null
   if (!local) throw new Error('结算数据无法确定本机玩家，暂不推断友方队伍，请稍后重试。')
   local.isLocalPlayer = true
   const localTeamId = local.teamId
   const allies = players.filter((row) => row.teamId === localTeamId).slice(0, 5)
-  let matchGame = null
+  let matchGame = providedMatch ?? null
   try {
-    if (current?.puuid) matchGame = await getLatestMatchForPuuid(current.puuid, eog.gameId)
+    if (!matchGame && current?.puuid) matchGame = await getLatestMatchForPuuid(current.puuid, eog.gameId)
   } catch {}
   const identities = Array.isArray(matchGame?.participantIdentities) ? matchGame.participantIdentities : []
   const matchParticipants = Array.isArray(matchGame?.participants) ? matchGame.participants : []
@@ -690,7 +690,8 @@ function formatReviewData(postgame) {
   return {
     result: postgame.win ? '胜利' : '失败',
     durationSeconds: postgame.gameLength,
-    teamTotals: { ...teamTotals, teammateHealing: healing || 0 },
+    dataWarnings: postgame.dataWarnings || [],
+    teamTotals: { ...teamTotals, teammateHealing: healing === null ? null : healing || 0 },
     allies: postgame.allies.map((row) => ({
       name: row.gameName || '未知玩家',
       tag: row.tagLine ? `#${row.tagLine}` : '',

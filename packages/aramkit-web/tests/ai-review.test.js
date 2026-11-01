@@ -11,7 +11,7 @@ function gameFixture() {
   return { gameId: 12345, win: true, gameLength: 600, augmentsReady: true, totals: { damage: 150000, healing: 500 }, allies: Array.from({ length: 5 }, (_, i) => ({ gameName: `真实玩家${i}`, tagLine: 'private-tag', puuid: 'private-id', isLocalPlayer: i === 0, champion: { name: `英雄${i}` }, kills: i + 1, deaths: 2, assists: 5, level: 18, cs: 30, gold: 10000, damage: 30000, damageTaken: 20000, healing: 100, cc: 2, vision: 0, metrics: { damageShare: 20 }, items: [{ name: '测试装备' }], augments: [{ name: '测试海克斯', rarityLabel: '黄金' }] })) }
 }
 const modelReview = () => ({ summary: '测试全队总结', players: Array.from({ length: 5 }, (_, i) => ({ playerId: `p${i + 1}`, verdict: i === 0 ? '尽力' : '正常发挥', score: 80 - i, title: '测试标题', comment: '伤害占比20%，依据统计数据评价。', suggestion: '根据英雄定位补充防装。' })) })
-function fixture({ response, protocol = 'responses', historyStore } = {}) {
+function fixture({ response, protocol = 'responses', historyStore, diagnostics } = {}) {
   const calls = [], saved = []
   let game = gameFixture(), clock = 1000000
   const service = { postgame: async (options) => { assert.equal(options.anonymize, true); return { ok: true, postgame: game } } }
@@ -23,7 +23,7 @@ function fixture({ response, protocol = 'responses', historyStore } = {}) {
     if (protocol === 'chat-completions') return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(modelReview()) } }], usage: { prompt_tokens: 12, completion_tokens: 34, total_tokens: 46 } })
     return Response.json({ status: 'completed', output: [{ type: 'reasoning', summary: [] }, { type: 'message', content: [{ type: 'output_text', text: JSON.stringify(modelReview()) }] }], usage: { input_tokens: 12, output_tokens: 34, total_tokens: 46 } })
   }
-  const ai = createAiReview({ service, store, historyStore, fetchImpl, now: () => clock })
+  const ai = createAiReview({ service, store, historyStore, diagnostics, fetchImpl, now: () => clock })
   const configure = () => ai.saveConfig({ baseUrl: 'https://api.example.test/v1', model: 'test-model', protocol, apiKey: 'fixture-only-key', remember: false })
   return { ai, calls, saved, configure, setGame: (value) => { game = value }, tick: (value) => { clock += value } }
 }
@@ -277,5 +277,38 @@ test('落盘失败仍返回已付费生成的评价并明确提示，不自动�
   assert.equal(result.review.players.length, 5)
   assert.equal(f.calls.length, 1)
   assert.equal((await f.ai.review()).cached, true)
+  assert.equal(f.calls.length, 1)
+})
+
+test('仅向 DeepSeek 官方 Chat 端点发送关闭思考参数，兼容其他服务的请求不受影响', async () => {
+  const official = fixture({ protocol: 'chat-completions' })
+  await official.ai.saveConfig({ baseUrl: 'https://api.deepseek.com', model: 'deepseek-flash', protocol: 'chat-completions', apiKey: 'fixture-only-key', remember: false })
+  await official.ai.review()
+  assert.deepEqual(official.calls[0].body.thinking, { type: 'disabled' })
+  const compatible = fixture({ protocol: 'chat-completions' })
+  await compatible.configure()
+  await compatible.ai.review()
+  assert.equal(compatible.calls[0].body.thinking, undefined)
+})
+
+test('服务商 stop 但最终内容全为空白时明确报错，保存元数据但不保存推理内容或自动重试', async () => {
+  const reports = []
+  const f = fixture({ protocol: 'chat-completions', diagnostics: { save: async (record) => reports.push(record) }, response: async () => Response.json({ choices: [{ finish_reason: 'stop', message: { content: '   \n  ', reasoning_content: 'fixture-hidden-reasoning' } }], usage: { completion_tokens: 6000, completion_tokens_details: { reasoning_tokens: 5000 } } }) })
+  await f.configure()
+  await assert.rejects(f.ai.review(), /空白最终内容/)
+  assert.equal(f.calls.length, 1)
+  assert.equal(reports.length, 1)
+  assert.equal(reports[0].nonWhitespaceCharacters, 0)
+  assert.equal(reports[0].reasoningTokens, 5000)
+  assert.doesNotMatch(JSON.stringify(reports), /fixture-hidden-reasoning|fixture-only-key|authorization/)
+})
+
+test('格式失败诊断保留最终文本但移除当前密钥，不复制配置和请求头', async () => {
+  const reports = []
+  const f = fixture({ diagnostics: { save: async (record) => reports.push(record) }, response: async () => Response.json({ status: 'completed', output_text: 'invalid-json fixture-only-key' }) })
+  await f.configure()
+  await assert.rejects(f.ai.review(), /有效的五人点评 JSON/)
+  assert.equal(reports[0].finalText, 'invalid-json [redacted]')
+  assert.doesNotMatch(JSON.stringify(reports), /fixture-only-key|apiKey|authorization/)
   assert.equal(f.calls.length, 1)
 })

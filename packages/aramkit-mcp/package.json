@@ -1,6 +1,6 @@
 {
   "name": "aramkit-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "海斗助手 MCP：为 Codex 提供 ARAMKit 查询与只读英雄联盟客户端数据",

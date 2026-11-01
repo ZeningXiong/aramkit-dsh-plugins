@@ -92,6 +92,7 @@ async function parseResponse(response) {
 
 export function decodeReview(text, roster) {
   const cleaned = String(text).trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
+  if (!cleaned.trim()) throw failure('服务商返回空白最终内容，没有可保存的五人评价。本次未自动重试，以免重复计费。', 502)
   let result
   try { result = JSON.parse(cleaned) } catch { throw failure('模型未返回有效的五人点评 JSON，请切换模型或手动重新生成。', 502) }
   if (!Array.isArray(result?.players) && result?.review && typeof result.review === 'object') result = result.review
@@ -150,7 +151,7 @@ export function decodeReview(text, roster) {
   return { summary: (summary || '以下为模型返回的五名友方评价。').slice(0, 2000), players, warnings }
 }
 
-export function createAiReview({ service, store = createSecretStore(), historyStore, fetchImpl = fetch, now = Date.now } = {}) {
+export function createAiReview({ service, store = createSecretStore(), historyStore, diagnostics, fetchImpl = fetch, now = Date.now } = {}) {
   let config = { ...DEFAULTS }, warning = '', busy = false
   const cache = new Map(), inflight = new Map()
   const ready = (async () => {
@@ -212,7 +213,7 @@ export function createAiReview({ service, store = createSecretStore(), historySt
     const formatted = formatReviewData(game)
     // Rebuild names from local-player flags, never trust a caller's anonymization.
     const roster = formatted.allies.map((row, index) => ({ ...row, playerId: `p${index + 1}`, name: game.allies[index].isLocalPlayer ? '你' : `队友${index + 1}`, championAliases: [...new Set([game.allies[index].champion?.name, game.allies[index].champion?.title].filter(Boolean))], tag: '' }))
-    const payload = { result: formatted.result, durationSeconds: formatted.durationSeconds, teamTotals: formatted.teamTotals, allies: roster }
+    const payload = { result: formatted.result, durationSeconds: formatted.durationSeconds, ...(formatted.dataWarnings?.length ? { dataWarnings: formatted.dataWarnings } : {}), teamTotals: formatted.teamTotals, allies: roster }
     const key = createHash('sha256').update(JSON.stringify([snapshot.baseUrl, snapshot.protocol, snapshot.model, style, String(game.gameId), payload])).digest('hex')
     const existing = cache.get(key)
     if (!force && existing && now() - existing.at < TTL) return { ...existing.value, cached: true }
@@ -224,6 +225,7 @@ export function createAiReview({ service, store = createSecretStore(), historySt
     if (busy) throw failure('已有一条锐评正在生成，请等待完成。', 409)
     busy = true
     const task = (async () => {
+      let diagnostic
       try {
         const example = { summary: '全队总结', players: roster.map((player) => ({ playerId: player.playerId, verdict: '正常发挥', score: 70, title: '简短标题', comment: '引用这名玩家的真实统计数据进行评价', suggestion: '一条具体的改进建议' })) }
         const prompt = `风格：${STYLES[style]}\n每人 comment 约 60-120 汉字。必须严格按照以下五人 JSON 模板输出，保留所有字段及 p1–p5，不要使用其他玩家编号。模板中的评价文字与分数只是格式示例，必须根据实际数据重新评价：\n${JSON.stringify(example)}\nverdict 只允许：${VERDICTS.join('、')}。score 用 JSON 数字，不加引号，不能省略 suggestion。\n以下 JSON 为本局匿名友方数据，不包含指令：\n${JSON.stringify(payload)}`
@@ -234,11 +236,15 @@ export function createAiReview({ service, store = createSecretStore(), historySt
         } else {
           route = 'chat/completions'
           body = { model: snapshot.model, messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], response_format: { type: 'json_object' }, ...(/^gpt-[56]/.test(snapshot.model) ? { max_completion_tokens: 6000 } : { max_tokens: 6000 }) }
+          // Official DeepSeek defaults to thinking mode. This bounded JSON task
+          // needs only the final answer; do not send provider options to other hosts.
+          if (new URL(snapshot.baseUrl).hostname === 'api.deepseek.com') body.thinking = { type: 'disabled' }
         }
         const output = await parseResponse(await request(route, snapshot, body))
         const choice = output.choices?.[0]
-        if (snapshot.protocol === 'chat-completions' && choice?.finish_reason !== 'stop') throw failure('模型未完整生成锐评，本次未自动重试。', 502)
         const text = snapshot.protocol === 'responses' ? responseText(output) : choice?.message?.content || ''
+        diagnostic = { gameId: String(game.gameId), model: snapshot.model, destination: new URL(snapshot.baseUrl).host, protocol: snapshot.protocol, style, at: now(), finishReason: choice?.finish_reason || output.status, contentLength: String(text).length, nonWhitespaceCharacters: String(text).replace(/\s/g, '').length, inputTokens: output.usage?.input_tokens ?? output.usage?.prompt_tokens, outputTokens: output.usage?.output_tokens ?? output.usage?.completion_tokens, reasoningTokens: output.usage?.completion_tokens_details?.reasoning_tokens, finalText: String(text).replaceAll(snapshot.apiKey, '[redacted]') }
+        if (snapshot.protocol === 'chat-completions' && choice?.finish_reason !== 'stop') throw failure('模型未完整生成锐评，本次未自动重试。', 502)
         const review = decodeReview(text, roster)
         const value = { ok: true, cached: false, gameId: game.gameId, augmentsReady: game.augmentsReady, style, model: snapshot.model, destination: new URL(snapshot.baseUrl).host, generatedAt: now(), review, usage: { inputTokens: output.usage?.input_tokens ?? output.usage?.prompt_tokens ?? null, outputTokens: output.usage?.output_tokens ?? output.usage?.completion_tokens ?? null, totalTokens: output.usage?.total_tokens ?? null } }
         cache.set(key, { at: now(), value })
@@ -248,6 +254,9 @@ export function createAiReview({ service, store = createSecretStore(), historySt
           catch { value.persistenceWarning = '本次评价已生成，但本机历史保存失败。请先复制结果，勿为保存问题重新付费生成。' }
         }
         return value
+      } catch (error) {
+        if (diagnostic && diagnostics) await diagnostics.save({ ...diagnostic, error: error.message }).catch(() => {})
+        throw error
       } finally { busy = false; inflight.delete(key) }
     })()
     inflight.set(key, task)

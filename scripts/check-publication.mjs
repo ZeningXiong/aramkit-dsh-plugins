@@ -13,7 +13,7 @@ for (let i = 0; i < args.length; i++) {
 const index = split(git('ls-files', '-z'))
 const changed = split(git('diff', '--cached', '--name-only', '--diff-filter=ACMR', '-z'))
 const issues = []
-const privateName = /(?:^|\/)(?:\.local|node_modules|\.pnpm-store|runtime)(?:\/|$)|(?:^|\/)(?:\.env(?:\..+)?|ai-settings\.json|recent-postgame\.json|(?:match-)?history\.json(?:\.tmp)?)$|\.(?:log|key|pem|pfx|p12|lnk|zip|exe|dmp)$/i
+const privateName = /(?:^|\/)(?:\.local|node_modules|\.pnpm-store|runtime)(?:\/|$)|(?:^|\/)(?:\.env(?:\..+)?|ai-settings\.json|recent-postgame\.json|review-error\.json(?:\.tmp)?|(?:match-)?history\.json(?:\.tmp)?)$|\.(?:log|key|pem|pfx|p12|lnk|zip|exe|dmp)$/i
 for (const file of index) if (privateName.test(file) && !file.endsWith('/.env.example') && file !== '.env.example') issues.push(`${file}: private/runtime file is tracked`)
 const snapshots = [{ ref: '', label: 'index', files: all ? index : changed }]
 if (base) {

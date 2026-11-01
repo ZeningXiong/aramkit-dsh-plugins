@@ -417,6 +417,11 @@ export async function getLatestMatchForPuuid(puuid, gameId = '') {
   return games[0] ?? null
 }
 
+export async function getMatchDetails(gameId) {
+  if (!/^\d{1,24}$/.test(String(gameId))) return null
+  return lcuGet(`/lol-match-history/v1/games/${encodeURIComponent(gameId)}`, { timeout: 5000 })
+}
+
 export function getLiveGameData() {
   return new Promise((resolve) => {
     const request = https.request(

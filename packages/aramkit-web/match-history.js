@@ -10,7 +10,7 @@ const rowKeys = ['isLocalPlayer', 'championId', 'kills', 'deaths', 'assists', 'l
 
 function anonymousGame(game) {
   if (!game?.gameId || !Array.isArray(game.allies) || game.allies.length !== 5 || game.allies.some((row) => !row?.champion || !Array.isArray(row.items))) return null
-  const result = pick(sanitize(game, true), ['gameId', 'gameMode', 'gameLength', 'win', 'augmentsReady', 'capturedAt'])
+  const result = pick(sanitize(game, true), ['gameId', 'gameMode', 'gameLength', 'win', 'augmentsReady', 'capturedAt', 'source', 'dataWarnings'])
   result.gameId = String(game.gameId)
   result.totals = pick(game.totals, ['kills', 'deaths', 'assists', 'gold', 'damage', 'damageTaken', 'healing', 'cc', 'vision'])
   result.allies = game.allies.map((row, index) => ({
