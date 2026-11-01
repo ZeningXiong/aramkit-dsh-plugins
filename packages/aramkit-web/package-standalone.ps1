@@ -10,6 +10,7 @@ $files = @(
   'packages\aramkit-web\package.json', 'packages\aramkit-web\server.js', 'packages\aramkit-web\launch.ps1',
   'packages\aramkit-web\ai-review.js', 'packages\aramkit-web\secret-store.js',
   'packages\aramkit-web\recent-postgame.js',
+  'packages\aramkit-web\match-history.js',
   'packages\aramkit-web\public\index.html', 'packages\aramkit-web\public\app.js', 'packages\aramkit-web\public\style.css', 'packages\aramkit-web\public\icon.svg',
   'packages\aramkit-web\public\app.ico',
   'packages\aramkit-web\runtime\node.exe', 'packages\aramkit-web\runtime\NODE-LICENSE.txt',

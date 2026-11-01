@@ -1,10 +1,10 @@
 # 海斗助手 · DSH 插件
 
-> **独立网页版 v0.2.1**：无需打开 Codex 或 DSH，支持英雄出装、海克斯、只读比赛数据及可选 OpenAI/兼容 API 五人锐评。源码版需要 Node.js 22+；自行制作的便携包可自带运行程序。安装与使用见 [packages/aramkit-web/README.md](packages/aramkit-web/README.md)。
+> **独立网页版 v0.3.0**：无需打开 Codex 或 DSH，支持英雄出装、海克斯、只读比赛数据及可选 OpenAI/兼容 API 五人锐评。新增本机 24 小时对局和评价记录，开下一局、刷新或重启后仍可查看。源码版需要 Node.js 22+；自行制作的便携包可自带运行程序。安装与使用见 [packages/aramkit-web/README.md](packages/aramkit-web/README.md)。
 
 > **Codex MCP 适配版**：新增独立的本地 stdio MCP 服务，无需 DSH。英雄/海克斯查询、隐藏分、只读客户端状态和赛后复盘的安装说明见 [packages/aramkit-mcp/README.md](packages/aramkit-mcp/README.md)。原 DSH 插件仍可照常使用。
 
-四种入口的功能边界、API 兼容方式和贡献验证见 [独立网页与 MCP 扩展说明](docs/WEB-MCP.md)。下文的 DSH 安装、自动锐评和 24 小时对局记录适用于原 DSH 插件；独立网页的 AI 由使用者手动触发，最近结算保留 30 分钟。
+四种入口的功能边界、API 兼容方式和贡献验证见 [独立网页与 MCP 扩展说明](docs/WEB-MCP.md)。下文的 DSH 安装和自动锐评适用于原 DSH 插件；独立网页有独立的 24 小时历史页，AI 由使用者手动触发。
 
 ![海斗助手](assets/banner.svg)
 
@@ -20,8 +20,8 @@
 | 插件 | 版本 | 路径 |
 |---|---|---|
 | 海斗助手隔离版 | v1.0.9 | `packages/aramkit-helper` |
-| 海斗助手在线版 | v1.0.15 | `packages/aramkit-live` |
-| 独立网页版 | v0.2.1 | `packages/aramkit-web` |
+| 海斗助手在线版 | v1.0.16 | `packages/aramkit-live` |
+| 独立网页版 | v0.3.0 | `packages/aramkit-web` |
 | MCP 适配 | v0.1.0 | `packages/aramkit-mcp` |
 
 ---

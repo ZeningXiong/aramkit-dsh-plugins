@@ -10,5 +10,5 @@ const aiApi = {
 }
 const service = { gameState: async () => ({ ok: true, connected: true, phase: 'EndOfGame', postgame: game }), postgame: async () => ({ ok: true, postgame: game }) }
 const dataApi = { listChampions: async () => ({ ok: true, champions: [{ id: 157, name: '测试', title: '亚索' }] }), buildChampionPayload: async () => ({ ok: true, champion: { id: 157, name: '测试', title: '亚索' }, builds: [], augments: {} }) }
-const app = createApp({ service, dataApi, aiApi, postgameStore: { save: async () => {}, load: async () => null } })
+const app = createApp({ service, dataApi, aiApi, postgameStore: { save: async () => {}, load: async () => null }, historyStore: { record: async () => {}, list: async () => [], get: async () => null } })
 app.listen(3211, '127.0.0.1', () => console.log('Local mock QA http://127.0.0.1:3211'))

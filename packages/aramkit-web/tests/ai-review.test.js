@@ -5,12 +5,13 @@ import os from 'node:os'
 import path from 'node:path'
 import { createAiReview, validateConfig, decodeReview } from '../ai-review.js'
 import { createSecretStore } from '../secret-store.js'
+import { createMatchHistoryStore } from '../match-history.js'
 
 function gameFixture() {
   return { gameId: 12345, win: true, gameLength: 600, augmentsReady: true, totals: { damage: 150000, healing: 500 }, allies: Array.from({ length: 5 }, (_, i) => ({ gameName: `真实玩家${i}`, tagLine: 'private-tag', puuid: 'private-id', isLocalPlayer: i === 0, champion: { name: `英雄${i}` }, kills: i + 1, deaths: 2, assists: 5, level: 18, cs: 30, gold: 10000, damage: 30000, damageTaken: 20000, healing: 100, cc: 2, vision: 0, metrics: { damageShare: 20 }, items: [{ name: '测试装备' }], augments: [{ name: '测试海克斯', rarityLabel: '黄金' }] })) }
 }
 const modelReview = () => ({ summary: '测试全队总结', players: Array.from({ length: 5 }, (_, i) => ({ playerId: `p${i + 1}`, verdict: i === 0 ? '尽力' : '正常发挥', score: 80 - i, title: '测试标题', comment: '伤害占比20%，依据统计数据评价。', suggestion: '根据英雄定位补充防装。' })) })
-function fixture({ response, protocol = 'responses' } = {}) {
+function fixture({ response, protocol = 'responses', historyStore } = {}) {
   const calls = [], saved = []
   let game = gameFixture(), clock = 1000000
   const service = { postgame: async (options) => { assert.equal(options.anonymize, true); return { ok: true, postgame: game } } }
@@ -22,7 +23,7 @@ function fixture({ response, protocol = 'responses' } = {}) {
     if (protocol === 'chat-completions') return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(modelReview()) } }], usage: { prompt_tokens: 12, completion_tokens: 34, total_tokens: 46 } })
     return Response.json({ status: 'completed', output: [{ type: 'reasoning', summary: [] }, { type: 'message', content: [{ type: 'output_text', text: JSON.stringify(modelReview()) }] }], usage: { input_tokens: 12, output_tokens: 34, total_tokens: 46 } })
   }
-  const ai = createAiReview({ service, store, fetchImpl, now: () => clock })
+  const ai = createAiReview({ service, store, historyStore, fetchImpl, now: () => clock })
   const configure = () => ai.saveConfig({ baseUrl: 'https://api.example.test/v1', model: 'test-model', protocol, apiKey: 'fixture-only-key', remember: false })
   return { ai, calls, saved, configure, setGame: (value) => { game = value }, tick: (value) => { clock += value } }
 }
@@ -220,4 +221,61 @@ test('Windows 加密保存可恢复，磁盘文件没有明文密钥；取消记
     for (const file of await readdir(directory)) await unlink(path.join(directory, file))
     await rmdir(directory)
   }
+})
+
+async function historyFixture(run) {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'aramkit-review-history-test-'))
+  const file = path.join(directory, 'history.json')
+  const historyStore = createMatchHistoryStore({ file, now: () => 1000000 })
+  try { await run({ file, historyStore }) }
+  finally { for (const entry of await readdir(directory)) await unlink(path.join(directory, entry)); await rmdir(directory) }
+}
+
+test('两局 AI 评价分别持久保存，重启后复用历史评价不再次调用模型', async () => historyFixture(async ({ file, historyStore }) => {
+  const first = fixture({ historyStore })
+  await first.configure()
+  const result = await first.ai.review()
+  first.setGame({ ...gameFixture(), gameId: 67890 })
+  await first.ai.review({ style: 'coach' })
+  const restarted = fixture({ historyStore: createMatchHistoryStore({ file, now: () => 1000000 }) })
+  await restarted.configure()
+  const cached = await restarted.ai.review()
+  assert.equal(cached.cached, true)
+  assert.deepEqual(cached.review, result.review)
+  assert.equal(restarted.calls.length, 0)
+  assert.equal((await historyStore.get(67890)).reviews[0].result.style, 'coach')
+}))
+
+test('模型较晚返回时仍保存到原对局，不会覆盖已经开始的下一局', async () => historyFixture(async ({ historyStore }) => {
+  let release, reached
+  const started = new Promise((resolve) => { reached = resolve })
+  const gate = new Promise((resolve) => { release = resolve })
+  const f = fixture({ historyStore, response: async () => {
+    reached()
+    await gate
+    return Response.json({ status: 'completed', output_text: JSON.stringify(modelReview()) })
+  } })
+  await f.configure()
+  const pending = f.ai.review()
+  await started
+  const next = { ...gameFixture(), gameId: 67890 }
+  f.setGame(next)
+  await historyStore.record(next)
+  release()
+  const result = await pending
+  assert.equal(result.gameId, 12345)
+  assert.equal((await historyStore.get(12345)).reviews.length, 1)
+  assert.equal((await historyStore.get(67890)).reviews.length, 0)
+}))
+
+test('落盘失败仍返回已付费生成的评价并明确提示，不自动重试模型', async () => {
+  const historyStore = { findReview: async () => null, saveReview: async () => { throw new Error('fixture disk failure') } }
+  const f = fixture({ historyStore })
+  await f.configure()
+  const result = await f.ai.review()
+  assert.match(result.persistenceWarning, /保存失败/)
+  assert.equal(result.review.players.length, 5)
+  assert.equal(f.calls.length, 1)
+  assert.equal((await f.ai.review()).cached, true)
+  assert.equal(f.calls.length, 1)
 })

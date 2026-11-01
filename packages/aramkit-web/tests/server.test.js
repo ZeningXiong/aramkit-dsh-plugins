@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import http from 'node:http'
 import { createApp } from '../server.js'
 
-async function fixture(run, { savedGame = null } = {}) {
+async function fixture(run, { savedGame = null, historyStore = { record: async () => {}, list: async () => [], get: async () => null } } = {}) {
   const calls = []
   const service = {
     status: async () => ({ ok: true, connected: true, phase: 'Lobby' }),
@@ -25,7 +25,7 @@ async function fixture(run, { savedGame = null } = {}) {
     review: async () => ({ ok: true, review: { summary: '测试五人锐评', players: [] } }),
   }
   const postgameStore = { save: async () => {}, load: async () => savedGame }
-  const server = createApp({ service, dataApi, aiApi, postgameStore })
+  const server = createApp({ service, dataApi, aiApi, postgameStore, historyStore })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const base = `http://127.0.0.1:${server.address().port}`
   try { await run({ base, calls }) } finally {
@@ -97,3 +97,17 @@ test('最新结算不可用时返回带标记的本机最近结算，便于升�
   assert.equal(response.postgame.gameId, 42)
   assert.equal(response.postgame.source, 'local-snapshot')
 }, { savedGame: { gameId: 42, allies: [] } }))
+
+test('历史列表与详情不要求 API Key，读取不会触发模型，参数与跨站访问受限', async () => {
+  const entry = { gameId: 'previous', postgame: { gameId: 'previous', allies: [] }, reviews: [{ result: { review: { summary: '已保存的上一局评价' } } }] }
+  const historyStore = { record: async () => {}, list: async () => [{ gameId: entry.gameId, reviewCount: 1 }], get: async (id) => id === entry.gameId ? entry : null }
+  await fixture(async ({ base }) => {
+    assert.equal((await (await fetch(`${base}/api/ai/config`)).json()).configured, false)
+    assert.equal((await (await fetch(`${base}/api/history`)).json()).entries[0].gameId, 'previous')
+    const detail = await (await fetch(`${base}/api/history/detail?gameId=previous`)).json()
+    assert.equal(detail.entry.reviews[0].result.review.summary, '已保存的上一局评价')
+    assert.equal((await fetch(`${base}/api/history/detail?gameId=missing`)).status, 404)
+    assert.equal((await fetch(`${base}/api/history/detail?gameId=..%2Ffile`)).status, 400)
+    assert.equal((await fetch(`${base}/api/history`, { headers: { origin: 'https://example.com' } })).status, 403)
+  }, { historyStore })
+})

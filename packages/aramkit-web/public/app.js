@@ -31,9 +31,11 @@ function setView(view) {
   state.view = view
   $$('.view').forEach((element) => element.classList.toggle('active', element.id === `view-${view}`))
   $$('.nav-item').forEach((element) => element.classList.toggle('active', element.dataset.view === view))
-  $('#breadcrumb').textContent = { champions: '英雄出装', augments: '海克斯图鉴', live: '我的对局', rating: '隐藏分查询' }[view]
+  $('#breadcrumb').textContent = { champions: '英雄出装', augments: '海克斯图鉴', live: '我的对局', history: '对局记录', rating: '隐藏分查询' }[view]
+  window.history.replaceState(null, '', `#${view}`)
   if (view === 'augments') loadAugments()
   if (view === 'live') refreshGame(true)
+  if (view === 'history') loadHistory(true)
 }
 function updateVersion(data) {
   if (data.version) $('#version-badge').textContent = `版本 ${data.version}`
@@ -148,7 +150,11 @@ function teamTable(rows) {
   const live = rows.some((row) => row.kills != null)
   return `<div class="table-scroll"><table><thead><tr><th>玩家</th><th>英雄</th>${live ? '<th>K / D / A</th><th>等级 / 补刀</th>' : '<th>估算隐藏分</th>'}<th>推荐</th></tr></thead><tbody>${rows.map((row, index) => `<tr><td>${escape(row.gameName || `队友${index + 1}`)}</td><td>${escape(row.champion?.title || row.champion?.name || '待选择')}</td>${live ? `<td>${number(row.kills)} / ${number(row.deaths)} / ${number(row.assists)}</td><td>${number(row.level)} 级 / ${number(row.cs)}</td>` : `<td>${row.rating?.value != null ? number(row.rating.value) : '未查询'}</td>`}<td>${row.championId ? `<button class="text-button" data-open-champion="${row.championId}">查看出装 ↗</button>` : '—'}</td></tr>`).join('')}</tbody></table></div>`
 }
+function postgameHtml(game) {
+  return `<div class="game-result"><strong class="${game.win ? '' : 'loss'}">${game.win ? '胜利' : '失败'}</strong><span>时长 ${Math.floor(game.gameLength / 60)} 分 ${Math.round(game.gameLength % 60)} 秒</span><span>对局 ${escape(game.gameId)}</span></div><div class="table-scroll"><table><thead><tr><th>玩家 / 英雄</th><th>K / D / A</th><th>英雄伤害</th><th>伤害占比</th><th>经济</th><th>承伤</th><th>队友治疗</th><th>海克斯</th></tr></thead><tbody>${(game.allies || []).map((row, index) => `<tr><td>${escape(row.gameName || `队友${index + 1}`)}<br><small class="muted">${escape(row.champion?.title || row.champion?.name)}</small></td><td>${row.kills} / ${row.deaths} / ${row.assists}</td><td>${number(row.damage)}</td><td>${number(row.metrics?.damageShare)}%</td><td>${number(row.gold)}</td><td>${number(row.damageTaken)}</td><td>${number(row.healing)}</td><td>${row.augments?.map((augment) => escape(augment.name)).join('<br>') || '尚未同步'}</td></tr>`).join('')}</tbody></table></div><p class="fine-print">${game.augmentsReady ? '海克斯已同步。' : '海克斯明细可能需要等待客户端对局历史同步，稍后可重新读取。'} 以上为原始统计与占比，未调用 AI 模型。</p>`
+}
 function renderPostgame(game) {
+  state.postgameGameId = String(game.gameId)
   if (state.lastReviewGame && String(state.lastReviewGame) !== String(game.gameId)) {
     $('#ai-review-result').innerHTML = '<div class="blank-note">新一局结算已到，可以生成这局五人的锐评。</div>'
     state.lastReviewGame = null
@@ -156,8 +162,9 @@ function renderPostgame(game) {
   }
   state.hasPostgame = true
   $('#postgame-content').classList.remove('empty-small')
-  $('#postgame-content').innerHTML = `<div class="game-result"><strong class="${game.win ? '' : 'loss'}">${game.win ? '胜利' : '失败'}</strong><span>时长 ${Math.floor(game.gameLength / 60)} 分 ${Math.round(game.gameLength % 60)} 秒</span><span>对局 ${escape(game.gameId)}</span></div><div class="table-scroll"><table><thead><tr><th>玩家 / 英雄</th><th>K / D / A</th><th>英雄伤害</th><th>伤害占比</th><th>经济</th><th>承伤</th><th>队友治疗</th><th>海克斯</th></tr></thead><tbody>${(game.allies || []).map((row, index) => `<tr><td>${escape(row.gameName || `队友${index + 1}`)}<br><small class="muted">${escape(row.champion?.title || row.champion?.name)}</small></td><td>${row.kills} / ${row.deaths} / ${row.assists}</td><td>${number(row.damage)}</td><td>${number(row.metrics?.damageShare)}%</td><td>${number(row.gold)}</td><td>${number(row.damageTaken)}</td><td>${number(row.healing)}</td><td>${row.augments?.map((augment) => escape(augment.name)).join('<br>') || '尚未同步'}</td></tr>`).join('')}</tbody></table></div><p class="fine-print">${game.augmentsReady ? '海克斯已同步。' : '海克斯明细可能需要等待客户端对局历史同步，稍后可重新读取。'} 以上为原始统计与占比，未调用 AI 模型。</p>`
-  if (game.source === 'local-snapshot') $('#postgame-content').insertAdjacentHTML('beforeend', '<p class="fine-print">当前显示本机保存的最近一局匿名结算，最多保留 30 分钟；请核对上方对局编号。</p>')
+  $('#postgame-content').innerHTML = postgameHtml(game)
+  if (['local-snapshot', 'local-history'].includes(game.source)) $('#postgame-content').insertAdjacentHTML('beforeend', '<p class="fine-print">当前显示本机保存的匿名结算；历史记录保留 24 小时，请核对上方对局编号。</p>')
+  if (String(state.lastReviewGame) !== String(game.gameId) && !state.reviewBusy) restoreLiveReview(game.gameId)
 }
 async function refreshGame(manual = false) {
   if (state.gameBusy) return
@@ -167,6 +174,7 @@ async function refreshGame(manual = false) {
     state.game = game
     updateStatus(game)
     renderGame(game)
+    if (state.view === 'history') loadHistory(true)
     if (manual) toast('客户端状态已刷新')
   } catch (error) {
     $('#connection-chip span').textContent = '连接暂不可用'
@@ -249,27 +257,98 @@ async function testAiConnection() {
   catch (error) { $('#ai-config-status').textContent = error.message }
   finally { button.disabled = false }
 }
-async function generateReview(force = false) {
+
+const reviewStyles = { sharp: '毒舌锐评', coach: '温和教练', data: '数据复盘', abstract: '抽象整活' }
+function reviewHtml(result) {
+  const classes = { '尽力': 'carry', '正常发挥': 'normal', '犯罪': 'poor', '不团队': 'solo' }
+  const verdictClass = new Proxy(classes, { get: (target, key) => Object.hasOwn(target, key) ? target[key] : 'normal' })
+  let html = `<div class="review-summary"><span>本局锐评</span><p>${escape(result.review.summary)}</p></div><div class="review-grid">${result.review.players.map((row) => `<article class="player-review"><div class="player-review-head"><div><h3>${escape(row.name)}</h3><small>${escape(row.champion)}</small></div><strong class="review-score ${verdictClass[row.verdict]}">${row.score}<small>/100</small></strong></div><span class="verdict-badge ${verdictClass[row.verdict]}">${escape(row.verdict)}</span><h4>${escape(row.title)}</h4><p>${escape(row.comment)}</p><div class="review-suggestion"><span>下把试试</span>${escape(row.suggestion)}</div></article>`).join('')}</div><div class="review-meta"><span>${escape(result.model)} · ${escape(result.destination)} · ${result.cached ? '缓存结果，未再次调用模型' : '本次已调用模型'}</span><span>输入 ${number(result.usage.inputTokens)} / 输出 ${number(result.usage.outputTokens)} tokens</span></div><p class="fine-print">对局 ${escape(result.gameId)} · ${new Date(result.generatedAt).toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai' })} 生成 · AI 评价仅供参考。${result.augmentsReady ? '' : '海克斯尚未同步，点评仅基于现有数据。'}</p>`
+  if (result.review.warnings?.length) html = `<details class="format-note"><summary>本地格式兼容说明（未再次调用模型）</summary><ul>${result.review.warnings.map((note) => `<li>${escape(note)}</li>`).join('')}</ul></details>` + html
+  if (result.persistenceWarning) html = `<p class="error-box">${escape(result.persistenceWarning)}</p>` + html
+  return html
+}
+async function restoreLiveReview(gameId) {
+  try {
+    const { entry } = await api(`history/detail?gameId=${encodeURIComponent(gameId)}`)
+    const saved = entry.reviews.at(-1)?.result
+    if (saved && state.postgameGameId === String(gameId) && !state.reviewBusy) {
+      $('#ai-review-result').innerHTML = reviewHtml(saved)
+      state.lastReviewGame = String(gameId)
+      $('#regenerate-review').disabled = false
+    }
+  } catch { /* A fresh or incomplete result may not yet be in history. */ }
+}
+function historyList() {
+  $('#history-list').innerHTML = state.historyEntries?.length ? state.historyEntries.map((entry) => `<button class="panel history-card ${state.historyGameId === entry.gameId ? 'selected' : ''}" data-history-game="${escape(entry.gameId)}" aria-pressed="${state.historyGameId === entry.gameId}"><span class="history-result ${entry.win ? '' : 'loss'}">${entry.win ? '胜利' : '失败'}</span><strong>${escape(entry.me?.champion?.title || entry.me?.champion?.name || '未知英雄')}</strong><span>${entry.me ? `${number(entry.me.kills)} / ${number(entry.me.deaths)} / ${number(entry.me.assists)}` : '友方五人结算'}</span><small>${new Date(entry.capturedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })} · ${Math.floor((entry.gameLength || 0) / 60)} 分钟</small><span class="history-status">${entry.reviewCount ? `✦ 已保存 ${entry.reviewCount} 份评价` : '尚未生成评价'}</span><small>对局 ${escape(entry.gameId)}</small></button>`).join('') : '<div class="panel loading">暂无最近 24 小时的完整结算。对局结束后，在「我的对局」读取五人结算即可保存。</div>'
+}
+async function loadHistory(refreshDetail = false) {
+  const request = state.historyListRequest = (state.historyListRequest || 0) + 1
+  try {
+    const result = await api('history')
+    if (request !== state.historyListRequest) return
+    state.historyEntries = result.entries
+    historyList()
+    if (state.historyGameId && !result.entries.some((entry) => entry.gameId === state.historyGameId)) {
+      state.historyGameId = null
+      state.historyEntry = null
+    }
+    if (!state.historyGameId && result.entries.length) openHistory(result.entries[0].gameId)
+    else if (refreshDetail && state.historyGameId && state.reviewBusyGame !== state.historyGameId) openHistory(state.historyGameId)
+    else if (!result.entries.length) $('#history-detail').innerHTML = '<div class="panel loading">记录保存在本机，生成过的评价也会随对应对局保存。升级前已经丢失的评价无法恢复。</div>'
+  } catch (error) { $('#history-list').innerHTML = errorBox(error) }
+}
+function renderHistoryDetail(entry) {
+  const reviews = entry.reviews
+  const selected = reviews.find((row) => row.key === state.historyReviewKey) || reviews.at(-1)
+  state.historyReviewKey = selected?.key
+  state.historyEntry = entry
+  $('#history-detail').innerHTML = `<section class="panel postgame-panel"><div class="section-title"><h2>历史结算 · 匿名保存</h2><span class="muted">对局 ${escape(entry.gameId)}</span></div>${postgameHtml(entry.postgame)}</section><section class="panel ai-review-panel"><div class="section-title"><h2>✦ 这局的 AI 评价</h2><button class="text-button" data-ai-settings>配置 API ↗</button></div>${reviews.length ? `<label class="history-select">已保存的评价<select id="history-review-select">${[...reviews].reverse().map((row) => `<option value="${escape(row.key)}" ${row.key === selected.key ? 'selected' : ''}>${escape(reviewStyles[row.result.style] || row.result.style)} · ${escape(row.result.model)} · ${new Date(row.result.generatedAt).toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai' })}</option>`).join('')}</select></label>` : ''}<div id="history-review-result">${selected ? reviewHtml(selected.result) : '<div class="review-empty"><h3>这局还没有 AI 评价</h3><p>已有结算保存在本机；你可以现在生成，也可以开下一局后再来。</p></div>'}</div><div class="review-toolbar"><label for="history-review-style">生成风格</label><select id="history-review-style">${Object.entries(reviewStyles).map(([key, value]) => `<option value="${key}" ${key === (state.historyStyle || 'sharp') ? 'selected' : ''}>${value}</option>`).join('')}</select><button class="button" data-history-generate="${escape(entry.gameId)}" ${state.reviewBusy ? 'disabled' : ''}>生成所选风格</button>${reviews.length ? `<button class="button secondary" data-history-force="${escape(entry.gameId)}" ${state.reviewBusy ? 'disabled' : ''}>重新生成（消耗 API）</button>` : ''}</div><p class="fine-print">查看已保存的评价不调用模型。同一数据、模型和风格可复用已保存结果；强制重新生成会再次消耗 API 额度。历史最多保留 24 小时。</p></section>`
+}
+async function openHistory(gameId) {
+  const changed = state.historyGameId !== String(gameId)
+  state.historyGameId = String(gameId)
+  if (changed) state.historyReviewKey = null
+  historyList()
+  const request = state.historyDetailRequest = (state.historyDetailRequest || 0) + 1
+  if (changed) $('#history-detail').innerHTML = '<div class="panel loading">正在读取本机记录…</div>'
+  try {
+    const { entry } = await api(`history/detail?gameId=${encodeURIComponent(gameId)}`)
+    if (request === state.historyDetailRequest && state.historyGameId === String(gameId)) renderHistoryDetail(entry)
+  } catch (error) { if (request === state.historyDetailRequest) $('#history-detail').innerHTML = errorBox(error) }
+}
+async function generateReview(force = false, requestedGameId, style = $('#review-style').value) {
   if (!state.aiConfig?.configured) { openAiSettings(); return }
   if (state.reviewBusy) return
+  if (!requestedGameId && !state.postgameGameId) await readPostgame()
+  const gameId = String(requestedGameId || state.postgameGameId || '')
+  if (!gameId) { toast('先读取完整五人结算，再生成评价。'); return }
   state.reviewBusy = true
-  const buttons = [$('#generate-review'), $('#regenerate-review')]
+  state.reviewBusyGame = gameId
+  const target = requestedGameId ? $('#history-review-result') : $('#ai-review-result')
+  const previous = target?.innerHTML || ''
+  const buttons = [$('#generate-review'), $('#regenerate-review'), ...$$('[data-history-generate], [data-history-force]')]
   buttons.forEach((button) => { button.disabled = true })
-  const previous = $('#ai-review-result').innerHTML
-  $('#ai-review-result').innerHTML = '<div class="review-empty"><span>✦</span><h3>正在复盘这局友方五人…</h3><p>模型可能需要几十秒。此时请勿反复点击。</p></div>'
+  if (target) target.innerHTML = `<div class="review-empty"><span>✦</span><h3>正在复盘对局 ${escape(gameId)} 的友方五人…</h3><p>可以切换页面或开始下一局，请保持助手运行。完成后会保存到这局记录。</p></div>`
   try {
-    const result = await api('ai/review', { method: 'POST', body: JSON.stringify({ style: $('#review-style').value, force }) })
-    state.lastReviewGame = result.gameId
-    const classes = { '尽力': 'carry', '正常发挥': 'normal', '犯罪': 'poor', '不团队': 'solo' }
-    const verdictClass = new Proxy(classes, { get: (target, key) => Object.hasOwn(target, key) ? target[key] : 'normal' })
-    $('#ai-review-result').innerHTML = `<div class="review-summary"><span>本局锐评</span><p>${escape(result.review.summary)}</p></div><div class="review-grid">${result.review.players.map((row) => `<article class="player-review"><div class="player-review-head"><div><h3>${escape(row.name)}</h3><small>${escape(row.champion)}</small></div><strong class="review-score ${verdictClass[row.verdict]}">${row.score}<small>/100</small></strong></div><span class="verdict-badge ${verdictClass[row.verdict]}">${escape(row.verdict)}</span><h4>${escape(row.title)}</h4><p>${escape(row.comment)}</p><div class="review-suggestion"><span>下把试试</span>${escape(row.suggestion)}</div></article>`).join('')}</div><div class="review-meta"><span>${escape(result.model)} · ${escape(result.destination)} · ${result.cached ? '缓存结果，未再次调用模型' : '本次已调用模型'}</span><span>输入 ${number(result.usage.inputTokens)} / 输出 ${number(result.usage.outputTokens)} tokens</span></div><p class="fine-print">对局 ${escape(result.gameId)} · ${new Date(result.generatedAt).toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai' })} 生成 · AI 评价仅供参考。${result.augmentsReady ? '' : '海克斯尚未同步，点评仅基于现有数据。'}</p>`
-    if (result.review.warnings?.length) $('#ai-review-result').insertAdjacentHTML('afterbegin', `<details class="format-note"><summary>本地格式兼容说明（未再次调用模型）</summary><ul>${result.review.warnings.map((note) => `<li>${escape(note)}</li>`).join('')}</ul></details>`)
+    const result = await api('ai/review', { method: 'POST', body: JSON.stringify({ style, force, gameId }) })
+    if (state.postgameGameId === String(result.gameId)) {
+      state.lastReviewGame = String(result.gameId)
+      $('#ai-review-result').innerHTML = reviewHtml(result)
+    }
+    if (state.historyGameId === String(result.gameId)) state.historyReviewKey = null
+    toast(result.persistenceWarning || (result.cached ? '已读取保存的评价，未调用模型' : `对局 ${gameId} 的评价已保存到对局记录`))
   } catch (error) {
-    $('#ai-review-result').innerHTML = errorBox(error) + (state.lastReviewGame ? `<details class="previous-review"><summary>查看上次结果</summary>${previous}</details>` : '')
+    const stillSelected = requestedGameId ? state.historyGameId === gameId : state.postgameGameId === gameId
+    if (stillSelected && target?.isConnected) target.innerHTML = errorBox(error) + (previous ? `<details class="previous-review"><summary>查看此前内容</summary>${previous}</details>` : '')
+    toast(error.message)
   } finally {
     state.reviewBusy = false
-    $('#generate-review').disabled = false
+    state.reviewBusyGame = null
+    buttons.forEach((button) => { button.disabled = false })
+    $$('[data-history-generate], [data-history-force]').forEach((button) => { button.disabled = false })
     $('#regenerate-review').disabled = !state.lastReviewGame
+    await loadHistory(false)
+    if (state.historyGameId === gameId) await openHistory(gameId)
   }
 }
 
@@ -277,7 +356,11 @@ document.addEventListener('click', (event) => {
   const target = event.target.closest('button')
   if (!target) return
   if (target.dataset.view) setView(target.dataset.view)
-  if (target.id === 'review-nav') { setView('live'); $('#ai-review-panel').scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+  if (target.id === 'review-nav') { setView('live'); readPostgame(); $('#ai-review-panel').scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+  if (target.dataset.historyGame) openHistory(target.dataset.historyGame)
+  if (target.hasAttribute('data-ai-settings')) openAiSettings()
+  if (target.dataset.historyGenerate) generateReview(false, target.dataset.historyGenerate, state.historyStyle || 'sharp')
+  if (target.dataset.historyForce) generateReview(true, target.dataset.historyForce, state.historyStyle || 'sharp')
   if (target.dataset.champion) chooseChampion(target.dataset.champion)
   if (target.dataset.openChampion) { setView('champions'); chooseChampion(target.dataset.openChampion); window.scrollTo({ top: 0, behavior: 'smooth' }) }
   if (target.dataset.dataset && state.dataset !== target.dataset.dataset) {
@@ -302,6 +385,11 @@ document.addEventListener('click', (event) => {
   }
   if (target.dataset.retry) ({ champions: loadChampions, detail: () => chooseChampion(state.championId), augments: loadAugments, game: () => refreshGame(true) })[target.dataset.retry]?.()
   if (target.hasAttribute('data-settings')) openSettings()
+})
+$('#refresh-history').addEventListener('click', () => loadHistory(true))
+document.addEventListener('change', (event) => {
+  if (event.target.id === 'history-review-style') state.historyStyle = event.target.value
+  if (event.target.id === 'history-review-select' && state.historyEntry) { state.historyReviewKey = event.target.value; renderHistoryDetail(state.historyEntry) }
 })
 $('#champion-search').addEventListener('input', renderChampionList)
 $('#augment-search').addEventListener('input', () => { clearTimeout(augmentTimer); augmentTimer = setTimeout(loadAugments, 280) })
@@ -340,5 +428,7 @@ async function init() {
   chooseChampion(state.championId)
   refreshGame()
   loadAiConfig()
+  loadHistory()
+  if (['champions', 'augments', 'live', 'history', 'rating'].includes(location.hash.slice(1))) setView(location.hash.slice(1))
 }
 init()

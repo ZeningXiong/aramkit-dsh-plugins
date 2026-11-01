@@ -6,6 +6,7 @@ import { createService } from '../aramkit-core/service.js'
 import * as data from '../aramkit-live/data.js'
 import { createAiReview } from './ai-review.js'
 import { createPostgameStore } from './recent-postgame.js'
+import { createMatchHistoryStore } from './match-history.js'
 
 const publicDir = new URL('./public/', import.meta.url)
 const staticFiles = new Map([
@@ -48,15 +49,24 @@ async function jsonBody(request) {
   return parsed
 }
 
-export function createApp({ service = createService(), dataApi = data, aiApi, postgameStore = createPostgameStore() } = {}) {
-  const rememberPostgame = (game) => postgameStore.save(game).catch(() => {})
+export function createApp({ service = createService(), dataApi = data, aiApi, aiOptions, postgameStore = createPostgameStore(), historyStore = createMatchHistoryStore() } = {}) {
+  const rememberPostgame = async (game) => {
+    await postgameStore.save(game).catch(() => {})
+    await historyStore.record(game)
+  }
   const reviewService = { ...service, async postgame(options) {
+    if (options?.gameId !== undefined) {
+      const entry = await historyStore.get(options.gameId)
+      return entry ? { ok: true, cached: true, postgame: entry.postgame } : { ok: false, error: '没有找到这局记录，可能已超过 24 小时。请在对局记录中重新选择。' }
+    }
     const result = await service.postgame(options)
     if (result.ok) { await rememberPostgame(result.postgame); return result }
     const saved = await postgameStore.load()
-    return saved ? { ok: true, cached: true, restored: true, postgame: { ...saved, source: 'local-snapshot' } } : result
+    if (saved) { await historyStore.record(saved); return { ok: true, cached: true, restored: true, postgame: { ...saved, source: 'local-snapshot' } } }
+    const latest = (await historyStore.list())[0]
+    return latest ? { ok: true, cached: true, restored: true, postgame: { ...(await historyStore.get(latest.gameId)).postgame, source: 'local-history' } } : result
   } }
-  const ai = aiApi || createAiReview({ service: reviewService })
+  const ai = aiApi || createAiReview({ ...aiOptions, service: reviewService, historyStore })
   const csrf = randomBytes(24).toString('hex')
   const pending = new Map()
   // Multiple open tabs share in-flight reads instead of duplicating game/API requests.
@@ -104,7 +114,21 @@ export function createApp({ service = createService(), dataApi = data, aiApi, po
       if (request.method !== 'GET') throw fail('不支持此操作。', 405)
       let result
       switch (url.pathname) {
-        case '/api/health': result = { ok: true, app: 'aramkit-web', version: '0.2.1', independent: true }; break
+        case '/api/health': result = { ok: true, app: 'aramkit-web', version: '0.3.0', independent: true }; break
+        case '/api/history': {
+          const legacy = await postgameStore.load()
+          if (legacy) await historyStore.record(legacy)
+          result = { ok: true, entries: await historyStore.list() }
+          break
+        }
+        case '/api/history/detail': {
+          const gameId = text(p, 'gameId', 80)
+          if (!/^[A-Za-z0-9_-]{1,80}$/.test(gameId)) throw fail('对局编号无效。')
+          const entry = await historyStore.get(gameId)
+          if (!entry) throw fail('没有找到这局记录，可能已超过 24 小时。', 404)
+          result = { ok: true, entry }
+          break
+        }
         case '/api/ai/config': result = await ai.getConfig(); break
         case '/api/session': result = { ok: true, csrf }; break
         case '/api/status': result = await once('status', () => service.status()); break

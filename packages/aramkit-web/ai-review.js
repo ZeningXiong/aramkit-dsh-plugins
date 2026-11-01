@@ -150,7 +150,7 @@ export function decodeReview(text, roster) {
   return { summary: (summary || '以下为模型返回的五名友方评价。').slice(0, 2000), players, warnings }
 }
 
-export function createAiReview({ service, store = createSecretStore(), fetchImpl = fetch, now = Date.now } = {}) {
+export function createAiReview({ service, store = createSecretStore(), historyStore, fetchImpl = fetch, now = Date.now } = {}) {
   let config = { ...DEFAULTS }, warning = '', busy = false
   const cache = new Map(), inflight = new Map()
   const ready = (async () => {
@@ -200,12 +200,12 @@ export function createAiReview({ service, store = createSecretStore(), fetchImpl
     const visible = rows.some((row) => (row.id || row.slug) === config.model)
     return { ok: true, modelVisible: visible, message: visible ? '密钥验证成功，模型在列表中。实际推理能力以生成锐评为准；此次仅查询模型列表。' : '模型列表接口已连通，但未列出当前模型。若使用服务商别名，请核对后尝试生成；此次未调用模型。' }
   }
-  async function review({ style = 'sharp', force = false } = {}) {
+  async function review({ style = 'sharp', force = false, gameId } = {}) {
     await ready
-    if (!Object.hasOwn(STYLES, style) || typeof force !== 'boolean') throw failure('锐评参数无效。')
+    if (!Object.hasOwn(STYLES, style) || typeof force !== 'boolean' || (gameId !== undefined && (typeof gameId !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(gameId)))) throw failure('锐评参数无效。')
     if (!config.apiKey) throw failure('请先配置 AI API，再生成锐评。')
     const snapshot = { ...config }
-    const result = await service.postgame({ anonymize: true })
+    const result = await service.postgame({ anonymize: true, ...(gameId === undefined ? {} : { gameId }) })
     if (!result.ok) throw failure(result.error || '当前没有可用结算数据。')
     const game = result.postgame
     if (game.allies?.length !== 5) throw failure('当前友方结算数据不足五人，请等待完整结算后重试。')
@@ -213,9 +213,13 @@ export function createAiReview({ service, store = createSecretStore(), fetchImpl
     // Rebuild names from local-player flags, never trust a caller's anonymization.
     const roster = formatted.allies.map((row, index) => ({ ...row, playerId: `p${index + 1}`, name: game.allies[index].isLocalPlayer ? '你' : `队友${index + 1}`, championAliases: [...new Set([game.allies[index].champion?.name, game.allies[index].champion?.title].filter(Boolean))], tag: '' }))
     const payload = { result: formatted.result, durationSeconds: formatted.durationSeconds, teamTotals: formatted.teamTotals, allies: roster }
-    const key = createHash('sha256').update(JSON.stringify([snapshot.baseUrl, snapshot.protocol, snapshot.model, style, game.gameId, payload])).digest('hex')
+    const key = createHash('sha256').update(JSON.stringify([snapshot.baseUrl, snapshot.protocol, snapshot.model, style, String(game.gameId), payload])).digest('hex')
     const existing = cache.get(key)
     if (!force && existing && now() - existing.at < TTL) return { ...existing.value, cached: true }
+    if (!force && historyStore) {
+      const saved = await historyStore.findReview(game.gameId, key)
+      if (saved) return { ...saved, cached: true }
+    }
     if (inflight.has(key)) return inflight.get(key)
     if (busy) throw failure('已有一条锐评正在生成，请等待完成。', 409)
     busy = true
@@ -239,6 +243,10 @@ export function createAiReview({ service, store = createSecretStore(), fetchImpl
         const value = { ok: true, cached: false, gameId: game.gameId, augmentsReady: game.augmentsReady, style, model: snapshot.model, destination: new URL(snapshot.baseUrl).host, generatedAt: now(), review, usage: { inputTokens: output.usage?.input_tokens ?? output.usage?.prompt_tokens ?? null, outputTokens: output.usage?.output_tokens ?? output.usage?.completion_tokens ?? null, totalTokens: output.usage?.total_tokens ?? null } }
         cache.set(key, { at: now(), value })
         if (cache.size > 20) cache.delete(cache.keys().next().value)
+        if (historyStore) {
+          try { await historyStore.saveReview(game, key, value) }
+          catch { value.persistenceWarning = '本次评价已生成，但本机历史保存失败。请先复制结果，勿为保存问题重新付费生成。' }
+        }
         return value
       } finally { busy = false; inflight.delete(key) }
     })()
