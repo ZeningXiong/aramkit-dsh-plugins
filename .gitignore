@@ -1,4 +1,27 @@
 node_modules/
+.pnpm-store/
+packages/aramkit-web/runtime/
+packages/aramkit-web/.local/
+# Private credentials, machine state, and portable build output
+.env
+.env.*
+!.env.example
+**/.local/
+ai-settings.json
+recent-postgame.json
+match-history.json
+match-history.json.tmp
+review-error.json
+review-error.json.tmp
+history.json
+history.json.tmp
+*.key
+*.pem
+*.pfx
+*.p12
+*.lnk
+*.zip
+*.tar.gz
 *.log
 lockfile
 **/lockfile
