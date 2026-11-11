@@ -14,7 +14,7 @@
 | 插件 | 版本 | 路径 |
 |---|---|---|
 | 海斗助手隔离版 | v1.0.9 | `packages/aramkit-helper` |
-| 海斗助手在线版 | v1.0.15 | `packages/aramkit-live` |
+| 海斗助手在线版 | v1.1.0 | `packages/aramkit-live` |
 
 ---
 
@@ -29,12 +29,14 @@
 - [使用](#使用)
 - [在线版连接 LCU](#在线版连接-lcu)
 - [AI 锐评](#ai-锐评)
+- [游戏内实时解说](#游戏内实时解说)
 - [对局记录](#对局记录)
 - [数据与隐私](#数据与隐私)
 - [常见问题](#常见问题)
 - [项目结构](#项目结构)
 - [开发](#开发)
 - [架构说明](docs/ARCHITECTURE.md)
+- [更新日志](#更新日志)
 - [免责声明](#免责声明)
 - [License](#license)
 
@@ -57,6 +59,10 @@
 | AI 锐评友方五人 | — | 等待 match history 后结合数据与海克斯选择 |
 | AI 锐评开关 | — | 可关闭，只显示结算，不消耗 Token |
 | AI 锐评风格 / 语料 | — | 支持毒舌、教练、抽象、数据复盘和自定义语料，内置三套语料预设 |
+| 游戏内悬浮窗 | — | v1.1.0 起支持，宣纸底 + 头像 + 气泡 |
+| AI 实时陪伴解说 | — | v1.1.0 起支持，45–90 秒随机，按人设/口癖说话 |
+| 画面门禁 | — | 只在游戏窗口未最小化时抓帧 |
+| 手动抓帧工具 `aram_peek` | — | 支持 |
 | 对局记录 | — | 保留最近 24 小时，含结算数据与该局锐评，开下一局不丢 |
 | 需要 League 客户端 | 否 | 是（同一台 Windows） |
 | 需要 DSH 默认模型 | 否 | AI 锐评功能需要 |
@@ -77,6 +83,7 @@
 - 想少操作，选人时自动出结果；
 - 想在对局中切出来看自己英雄的推荐；
 - 想在对局结束后直接看结算和 AI 锐评；
+- 想要一个游戏内悬浮窗，按自己的人设陪你打、每 45–90 秒说一句；
 - 想控制 AI 开销，或自定义锐评风格和语料。
 
 ---
@@ -89,9 +96,11 @@
 - 在线版额外需要：
   - 已启动并登录的 League 客户端
   - 国服账号（隐藏分查询覆盖国服）
-  - DSH 已配置默认模型（AI 锐评需要）
+  - DSH 已配置默认模型（AI 锐评、实时解说需要）
+  - **游戏内悬浮窗需要 Python 3**（自动查找 `%LOCALAPPDATA%\Programs\Python\Python312\python.exe`；
+    也可用 `DSH_SEE_PYTHON` 指定）
 
-> 插件是 DSH Web UI 插件，不是游戏内悬浮窗。在线版的局内页面需要切到 DSH 或放在副屏查看。
+> 隔离版不是游戏内悬浮窗；在线版 v1.1.0 起带游戏内悬浮窗，DSH 面板仍然可以放在副屏查看。
 
 ---
 
@@ -189,6 +198,10 @@ D:\DSH\aramkit-dsh-plugins\packages\aramkit-live
    - 展示友方五人的 KDA、伤害、承伤、经济、治疗、控制、视野；
    - 自动调用 AI 生成 **尽力 / 犯罪 / 不团队** 锐评；
    - 失败可以点“重新锐评”。
+6. 游戏内悬浮窗：
+   - 在「全程解说」里打开开关并保存人设；
+   - 进对局后右上角出现悬浮窗，每 45–90 秒随机说一句；
+   - 切到桌面并最小化游戏时会自动停，不会读桌面。
 
 ---
 
@@ -270,6 +283,51 @@ ARAMKIT_LCU_LOCKFILE=D:\WeGameApps\英雄联盟\LeagueClient\lockfile
 
 ---
 
+## 游戏内实时解说
+
+v1.1.0 新增。在线版会在游戏里放一个置顶悬浮窗，AI 按你写的人设陪你打，
+每隔 45–90 秒随机说一句。
+
+### 开启
+
+1. 打开左侧栏「海斗助手在线版」；
+2. 在「全程解说」里打开开关；
+3. 把完整人设粘进文本框（上限 4000 字）；
+4. 进对局，悬浮窗会自动出现在屏幕右上角。
+
+人设建议写清楚：名字、年龄、职业、称呼、口癖、生气/撒娇时的反应、几句示例台词。
+没有固定模板，越具体越像那个人。
+
+### 它怎么说话
+
+- **不是解说员**：prompt 明确“你是女朋友，游戏只是背景”，优先关心人；
+- **情绪落点随机**：挑刺 / 护短 / 吃醋 / 心疼 / 日常联想 / 夸完补损 / 撒娇 / 假装不耐烦；
+- **口癖随机**：啧、哎、你看你、真是的、行吧、我跟你讲、笨死了、嗯？，一条最多 1–2 个；
+- **避免重复**：每次带最近 3 条解说作为“别说过了”的锚点；
+- **15–40 字**：短句、口语、有情绪，不总结、不分析、不播报数据。
+
+### 画面门禁
+
+只有游戏窗口存在且**没有最小化**时才抓帧：
+
+- 游戏在后台、DSH 在副屏 / 前台 → 照常解说；
+- 游戏最小化、切到桌面 → 跳过，不会对着桌面截图说话；
+- `aram_peek` 也会拒绝抓帧。
+
+### 成本
+
+按 `deepseek-flash` 官方价格估算：直接看图一条约 **0.15–0.35 分**，
+20 分钟一局约 **3–9 分钱**。不创建 DSH 会话、不累积历史，所以不会越打越贵。
+价格以 [DeepSeek 官方页面](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/) 为准。
+
+### 诊断接口
+
+- `GET /aramkit-live/commentary-status`：解说开关、阶段、画面门禁、覆盖层状态；
+- `GET /aramkit-live/test-direct-comment`：立刻生成一条，返回 `{ok,text}` 或错误；
+- `POST /aramkit-live/comments {text}`：手动发一条解说。
+
+---
+
 ## 对局记录
 
 - 顶部「本局 / 对局记录」随时切换，不打断当前对局；
@@ -294,6 +352,8 @@ ARAMKIT_LCU_LOCKFILE=D:\WeGameApps\英雄联盟\LeagueClient\lockfile
 - 在线版会向 ARAMKit 发送队友的 `昵称#Tag` 以查询隐藏分；
 - 在线版只在本机读取 LCU 的端口、令牌和比赛数据，**不会上传令牌**；
 - AI 锐评会把本局友方数据（包括玩家名、英雄、KDA、伤害、经济等）发送给 DSH 配置的模型；
+- 开启实时解说后，**游戏画面帧会发送给 DSH 配置的模型**；这是生成解说的必要输入，帧只在本机抓取，不经过本项目作者的服务器；
+- 解说、评论、人设都保存在 `%USERPROFILE%\.dsh\aramkit-live\` 下，只在本机；
 - 插件没有额外遥测，不会把数据发送到本项目作者的服务器。
 
 如果不希望队友名字被发送给模型，可以修改 `packages/aramkit-live/index.js` 中的 `formatReviewData`，把 `name` 改成匿名编号。
@@ -339,7 +399,26 @@ ARAMKIT_LCU_LOCKFILE=D:\WeGameApps\英雄联盟\LeagueClient\lockfile
 
 高分段样本天然少于全分段。插件默认过滤海克斯少于 200 场、出装少于 500 场的样本；没有足够样本时会显示“暂无数据”。
 
-### 6. 会不会被封号
+### 6. 游戏里没有解说气泡
+
+1. 确认「全程解说」是开的；
+2. 确认游戏窗口没有最小化（窗口在后台、DSH 在前台都可以）；
+3. 打开 `/aramkit-live/commentary-status` 看 `enabled / phase / foreground / overlay`；
+4. 如果 `overlayRunning` 是 false，重启 DSH；仍有问题看
+   `%USERPROFILE%\.dsh\aramkit-live\overlay-error.log`。
+
+### 7. 出现两个悬浮窗
+
+v1.1.0 已用 Windows 命名互斥量做单实例，并在启动前读取 `.cache/overlay.pid` 复用旧窗口。
+如果还能看到两个，说明其中一个是旧版本残留进程：重启 DSH 即可清掉。
+
+### 8. 解说太像游戏播报 / 没有人设感
+
+- 确认人设没有被截断（输入框上限已从 300 字放宽到 4000 字）；
+- 人设写具体：称呼、口癖、生气/撒娇时的反应、几句示例台词；
+- 还是不对的话，把最近 2–3 条解说发出来，调 prompt 里的情绪落点和口癖。
+
+### 9. 会不会被封号
 
 插件只读 LCU 和 Live Client API，不修改客户端、不注入游戏进程、不读内存。但 LCU 是 Riot 未公开的本地接口，使用第三方工具仍有理论风险，请自行判断并遵守游戏条款。
 
@@ -364,14 +443,22 @@ aramkit-dsh-plugins/
    │  ├─ icon.svg
    │  └─ README.md
    └─ aramkit-live/          # 海斗助手在线版
-      ├─ index.js            # Host：LCU 状态、结算、AI 锐评路由
+      ├─ index.js            # Host：LCU 状态、AI 锐评、解说循环、HTTP 路由
+      ├─ client.js           # Client：选人 / 局内 / 结算 / 解说设置
       ├─ data.js             # ARAMKit 数据访问
       ├─ lcu.js              # LCU / Live Client 连接器
-      ├─ client.js           # Client：选人 / 局内 / 结算 UI
+      ├─ comments-service.js # 解说流（人设、评论持久化）
+      ├─ hexscan-service.js  # 海克斯识别 + 悬浮窗生命周期
+      ├─ peek-tool.js        # aram_peek 工具（抓帧 + say）
+      ├─ game-window.js      # 画面门禁（游戏窗口是否可见）
+      ├─ src/augment-match.js
+      ├─ tools/hexscan.mjs
+      ├─ tools/hexoverlay.py
+      ├─ tools/ocr.ps1
+      ├─ assets/whale.png
+      ├─ locale/
       ├─ package.json
       ├─ cordis.patch.yml
-      ├─ locale/
-      ├─ icon.svg
       └─ README.md
 ```
 
@@ -405,6 +492,25 @@ dsh plugin --profile desktop add "link:<绝对路径>\packages\aramkit-live"
 - 不提交 `lockfile`、日志、token、`node_modules`；
 - 不把 LCU token 发送到任何远程服务；
 - AI 请求只通过 DSH 的 LLM 服务发起。
+
+---
+
+## 更新日志
+
+### v1.1.0（2026-11-12）
+
+- 新增游戏内实时陪伴解说：置顶悬浮窗 + 45–90 秒随机开口；
+- 解说改为**直接看图**：`ctx.llm.stream` + `{ type:'image', attachment }`，不创建 DSH 会话；
+- prompt 强化人设：完整人设、随机情绪落点、随机口癖、最近 3 条去重、陪伴优先；
+- 新增 `aram_peek` 工具与 `/aramkit-live/comments` 手动接口；
+- 新增画面门禁：只在游戏窗口未最小化时抓帧；
+- 悬浮窗单实例 + pid 复用，修复 DSH 重启后两个悬浮窗；
+- 人设输入上限 300 → 4000 字；
+- 新增 `/commentary-status`、`/test-direct-comment` 诊断接口。
+
+### v1.0.15
+
+- 选人 / 局内 / 结算、队友隐藏分、出装海克斯推荐、赛后 AI 锐评、对局记录。
 
 ---
 

@@ -760,6 +760,186 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
       )
     }
 
+    // 海克斯选卡识别：开关 + 当前三选一。数据来自宿主 /hexscan 路由。
+    // 局内看不到 DSH 的时候，真实提示走独立覆盖层（右上角），这里只是同一份数据的展示面。
+    function HexScanCard() {
+      const [hex, setHex] = useState(null)
+      const [busy, setBusy] = useState(false)
+      const [err, setErr] = useState('')
+
+      useEffect(() => {
+        let alive = true
+        const load = async () => {
+          try {
+            const snapshot = await getJson('hexscan')
+            if (alive) { setHex(snapshot); setErr('') }
+          } catch (e) {
+            if (alive) setErr(e instanceof Error ? e.message : String(e))
+          }
+        }
+        load()
+        const timer = setInterval(load, 2500)
+        return () => { alive = false; clearInterval(timer) }
+      }, [])
+
+      const toggle = async () => {
+        if (busy) return
+        setBusy(true)
+        try {
+          const snapshot = await getJson('hexscan', null, {
+            enabled: !hex?.enabled,
+            webBase: window.location.origin,
+          })
+          setHex(snapshot)
+          setErr('')
+        } catch (e) {
+          setErr(e instanceof Error ? e.message : String(e))
+        } finally {
+          setBusy(false)
+        }
+      }
+
+      const enabled = hex?.enabled === true
+      const last = hex?.last || null
+      const cards = last?.cards || []
+      const ageSec = last ? Math.max(0, Math.round((Date.now() - last.at) / 1000)) : 0
+
+      return h('div', { className: 'ol-card', style: { marginBottom: '12px' } },
+        h('div', { className: 'ol-section-head' },
+          h('h2', null, '海克斯助手'),
+          h('button', {
+            type: 'button',
+            onClick: toggle,
+            disabled: busy,
+            style: {
+              cursor: busy ? 'default' : 'pointer',
+              padding: '4px 12px',
+              borderRadius: '999px',
+              border: `1px solid ${enabled ? '#3ddc97' : 'rgba(120,140,180,.45)'}`,
+              background: enabled ? 'rgba(61,220,151,.16)' : 'transparent',
+              color: enabled ? '#3ddc97' : 'inherit',
+              fontSize: '12px',
+            },
+          }, enabled ? '已开启' : '已关闭'),
+        ),
+        h('div', { className: 'ol-hint', style: { marginTop: '4px' } },
+          enabled
+            ? `已就绪${hex?.championId ? ` · 英雄 ${hex.championId}` : ''} · 右上角有小按钮，点它才开始识别`
+            : '开启后右上角出现「海克斯识别」小按钮，需要时点一下，不点不抓屏'),
+        err ? h('div', { className: 'ol-error' }, `读取状态失败：${err}`) : null,
+        cards.length
+          ? h('div', { style: { marginTop: '10px' } },
+              h('div', { className: 'ol-hint', style: { marginBottom: '6px' } },
+                `最近一次识别 · ${ageSec} 秒前`),
+              h('table', { className: 'ol-table' },
+                h('thead', null,
+                  h('tr', null,
+                    h('th', null, '档'),
+                    h('th', null, '海克斯'),
+                    h('th', null, '胜率'),
+                    h('th', null, '样本'),
+                  ),
+                ),
+                h('tbody', null,
+                  cards.map((card, i) => h('tr', { key: card.id || i },
+                    h('td', null, card.tier || '-'),
+                    h('td', null, h('strong', null, card.name)),
+                    h('td', null, card.augmentWinRate != null
+                      ? `${(card.augmentWinRate * 100).toFixed(1)}%` : '-'),
+                    h('td', null, card.samples ? compact(card.samples) : '-'),
+                  )),
+                ),
+              ),
+              last?.advice
+                ? h('div', {
+                    style: {
+                      marginTop: '8px', padding: '8px 10px', borderRadius: '8px',
+                      background: 'rgba(255,215,94,.12)', color: '#ffd75e', fontSize: '13px',
+                    },
+                  }, last.advice)
+                : null,
+            )
+          : h('div', { className: 'ol-hint', style: { marginTop: '8px' } },
+              enabled ? '还没有识别到选卡界面，等待中…' : ''),
+      )
+    }
+
+    // AI 解说：人格设定 + 评论流。开关打开后宿主在局内持续看图发一句话。
+    function CommentStream() {
+      const [data, setData] = useState(null)
+      const [persona, setPersona] = useState('')
+      const [busy, setBusy] = useState(false)
+
+      useEffect(() => {
+        let alive = true
+        const load = async () => {
+          try {
+            const payload = await getJson('comments')
+            if (!alive) return
+            setData(payload)
+            setPersona((prev) => (prev ? prev : payload.persona || ''))
+          } catch { /* 静默 */ }
+        }
+        load()
+        const timer = setInterval(load, 4000)
+        return () => { alive = false; clearInterval(timer) }
+      }, [])
+
+      const send = async (body) => {
+        setBusy(true)
+        try {
+          const payload = await getJson('comments', null, body)
+          setData(payload)
+          if (body.persona) setPersona(payload.persona || '')
+        } catch { /* 静默 */ } finally { setBusy(false) }
+      }
+
+      const enabled = data?.enabled === true
+      const comments = data?.comments || []
+
+      return h('div', { className: 'ol-card', style: { marginBottom: '12px' } },
+        h('div', { className: 'ol-section-head' },
+          h('h2', null, 'AI 解说'),
+          h('button', {
+            type: 'button',
+            disabled: busy,
+            onClick: () => send({ enabled: !enabled }),
+            style: {
+              cursor: busy ? 'default' : 'pointer', padding: '4px 12px',
+              borderRadius: '999px', border: `1px solid ${enabled ? '#3ddc97' : 'rgba(120,140,180,.45)'}`,
+              background: enabled ? 'rgba(61,220,151,.16)' : 'transparent',
+              color: enabled ? '#3ddc97' : 'inherit', fontSize: '12px',
+            },
+          }, enabled ? '解说中' : '已关闭'),
+        ),
+        h('div', { className: 'ol-hint', style: { marginTop: '4px' } },
+          '局内持续看画面，按下面的人格每隔一会儿说一句话。'),
+        h('textarea', {
+          value: persona,
+          rows: 2,
+          maxLength: 4000,
+          onChange: (e) => setPersona(e.target.value),
+          onBlur: () => send({ persona }),
+          style: {
+            width: '100%', marginTop: '8px', padding: '6px 8px', borderRadius: '8px',
+            background: 'rgba(10,16,28,.6)', border: '1px solid rgba(120,140,180,.35)',
+            color: 'inherit', fontSize: '12px', resize: 'vertical',
+          },
+        }),
+        comments.length
+          ? h('div', { style: { marginTop: '10px', maxHeight: '220px', overflowY: 'auto' } },
+              comments.slice().reverse().map((row) => h('div', {
+                key: row.id,
+                style: { padding: '6px 8px', marginBottom: '6px', borderRadius: '8px', background: 'rgba(20,30,50,.55)', fontSize: '12px' },
+              },
+                h('div', { style: { color: 'rgba(150,170,205,.75)', fontSize: '11px', marginBottom: '2px' } },
+                  new Date(row.at).toLocaleTimeString('zh-CN', { hour12: false })),
+                row.text,
+              )))
+          : h('div', { className: 'ol-hint', style: { marginTop: '8px' } }, '还没有评论。'),
+      )
+    }
+
     function InGameView({ data }) {
       const allies = data?.allies || []
       const champion = (allies.find((row) => row.isSelf) || allies[0])?.champion || null
@@ -801,6 +981,7 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
       return h(
         'div',
         null,
+        h(HexScanCard, null),
         h('div', { className: 'ol-card' },
           h('div', { className: 'ol-section-head' },
             h('h2', null, TEXT.youChampion),
@@ -1240,6 +1421,20 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
     }
 
     function Page() {
+      // 游戏内覆盖层只在"这个面板开着"的时候出现：挂载时打心跳，卸载时立刻收起来。
+      // 心跳每 10 秒一次，覆盖层那边超过 30 秒没心跳也会自己隐藏（防止浏览器直接关掉）。
+      useEffect(() => {
+        let alive = true
+        const ping = (visible) => getJson('hexscan', null, { visible, visibleAt: Date.now() }).catch(() => {})
+        ping(true)
+        const timer = setInterval(() => { if (alive) ping(true) }, 10000)
+        return () => {
+          alive = false
+          clearInterval(timer)
+          ping(false)
+        }
+      }, [])
+
       const [state, setState] = useState(null)
       const [error, setError] = useState('')
       const [refreshing, setRefreshing] = useState(false)
@@ -1704,7 +1899,7 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
                   h('div', { className: 'ol-hint', style: { marginTop: '8px' } }, TEXT.manualHint),
                 ),
               )
-            : state?.inGame
+            : [h(CommentStream, { key: 'comments' }), state?.inGame
               ? h(InGameView, { data: state.inGame })
               : state?.champSelect
                 ? h(ChampSelectView, { data: state.champSelect })
@@ -1715,7 +1910,7 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-s
                     : h('div', { className: 'ol-empty' },
                         h('strong', null, phase === 'InProgress' ? TEXT.inGameTitle : TEXT.waiting),
                         h('p', null, phase === 'InProgress' ? TEXT.inGameDesc : '进入选人阶段后，这里会自动显示可选英雄、队友隐藏分与当前英雄推荐。'),
-                      ),
+                      )],
           h('div', { className: 'ol-foot' }, h('span', null, TEXT.source), h('span', null, 'LCU 数据仅在本机读取，不上传。')),
         ),
       )

@@ -1,4 +1,4 @@
-# 发布 Release 给使用者
+﻿# 发布 Release 给使用者
 
 GitHub 的 **Releases** 适合放“下载包”，但 DSH 不能直接点一个 URL 就把插件装上。使用者仍然需要把 ZIP 解压到本地，然后从本地目录安装。
 
@@ -7,8 +7,8 @@ GitHub 的 **Releases** 适合放“下载包”，但 DSH 不能直接点一个
 在 GitHub 仓库页面：
 
 1. **Releases → Draft a new release**；
-2. Tag 例如 `v1.0.13`；
-3. 标题例如 `海斗助手 v1.0.13`；
+2. Tag 例如 `v1.1.0`；
+3. 标题例如 `海斗助手 v1.1.0`；
 4. 上传 `release/` 下这两个文件：
    - `aramkit-helper.zip`（隔离版）
    - `aramkit-live.zip`（在线版）

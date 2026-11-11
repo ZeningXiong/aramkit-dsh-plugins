@@ -73,7 +73,18 @@
   - 局内五英雄推荐
   - 结算 / AI 锐评页
   - 对局记录列表与详情（本局 / 对局记录 两个标签）
+  - 解说开关 / 人设编辑 / 评论流
   - LCU 手动连接与诊断
+- `packages/aramkit-live/comments-service.js`
+  - 解说流：人设、评论持久化（`comments.json`）、开关
+- `packages/aramkit-live/hexscan-service.js`
+  - 海克斯 OCR 轮询、悬浮窗进程生命周期、`overlay-info.json`
+- `packages/aramkit-live/peek-tool.js`
+  - `aram_peek` 工具：抓帧 → 宿主附件 → `say` 落库
+- `packages/aramkit-live/game-window.js`
+  - 画面门禁：找 `RiotWindowClass` / `(TM) Client`，未最小化才允许抓帧
+- `packages/aramkit-live/tools/hexoverlay.py`
+  - 置顶悬浮窗；Windows 命名互斥量单实例；自己写 `--pid-file`
 
 ### 路由
 
@@ -89,6 +100,10 @@
 | `GET /aramkit-live/history` | 最近 24 小时对局列表 + AI 设置 |
 | `GET /aramkit-live/history-detail?gameId=` | 单局完整结算 + 锐评 |
 | `POST /aramkit-live/ai-settings` | 客户端同步 AI 开关 / 风格 / 语料，供后台生成使用 |
+| `GET/POST /aramkit-live/comments` | 解说开关 / 人设 / 手动发一条 / 快照 |
+| `GET/POST /aramkit-live/hexscan` | 海克斯识别开关、悬浮窗可见性 |
+| `GET /aramkit-live/commentary-status` | 解说状态：阶段、画面门禁、覆盖层、最近一次投递 |
+| `GET /aramkit-live/test-direct-comment` | 立刻生成一条解说（诊断用） |
 
 ### 状态流
 

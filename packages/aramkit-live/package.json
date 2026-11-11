@@ -1,9 +1,9 @@
 {
   "name": "@local/aramkit-live",
-  "version": "1.0.15",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
-  "description": "海斗助手在线版：连接英雄联盟 LCU，选人推荐、队友隐藏分、自动出装海克斯与赛后 AI 锐评",
+  "description": "海斗助手在线版：连接英雄联盟 LCU，选人/局内/结算数据，游戏内 AI 陪伴解说与赛后锐评",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
@@ -12,13 +12,22 @@
   },
   "files": [
     "index.js",
+    "peek-tool.js",
+    "game-window.js",
+    "comments-service.js",
+    "hexscan-service.js",
     "data.js",
     "lcu.js",
     "client.js",
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
-    "README.md"
+    "README.md",
+    "src/*.js",
+    "tools/*.mjs",
+    "tools/*.py",
+    "tools/*.ps1",
+    "assets/*"
   ],
   "dsh": {
     "bundle": {

@@ -1,4 +1,4 @@
-# 用 GitHub Desktop 发布
+﻿# 用 GitHub Desktop 发布
 
 这份文档按 GitHub Desktop 的实际操作顺序写，适合第一次发布本项目的人。
 
@@ -116,8 +116,8 @@ fix: keep in-game champion recommendations
 GitHub Desktop 不直接管理 tag，如果需要 Release：
 
 1. 打开仓库页面 → **Releases → Draft a new release**；
-2. Tag 例如 `v1.0.13`；
-3. 标题写“海斗助手 v1.0.13”；
+2. Tag 例如 `v1.1.0`；
+3. 标题写“海斗助手 v1.1.0”；
 4. 说明本次改动；
 5. 发布。
 

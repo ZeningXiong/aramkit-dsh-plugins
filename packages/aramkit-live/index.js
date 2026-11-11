@@ -5,9 +5,15 @@
  */
 
 import { createHash } from 'node:crypto'
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { mkdirSync, readFileSync, renameSync, writeFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { obtainHexScanService } from './hexscan-service.js'
+import { createCommentsService } from './comments-service.js'
+import { createAramPeekTool } from './peek-tool.js'
+import { createGameWindowProbe } from './game-window.js'
 import {
   buildChampionPayload,
   getChampionLookup,
@@ -44,6 +50,11 @@ let lastChampSelectAt = 0
 
 // --- 对局记录：本地持久化，保留 24 小时 ---
 const DATA_DIR = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'aramkit-live')
+const ROOT = dirname(fileURLToPath(import.meta.url))
+/** 覆盖层用的出装缓存：按英雄 id 存，10 分钟过期 */
+const overlayBuildCache = new Map()
+/** 用来判断"是不是新的一局"，好把上一局的解说清掉 */
+let lastOverlayPhase = null
 const HISTORY_FILE = join(DATA_DIR, 'history.json')
 const HISTORY_TTL = 24 * 60 * 60 * 1000
 const HISTORY_LIMIT = 60
@@ -889,7 +900,9 @@ async function generateReview(ctx, postgame, options = {}) {
   }
 }
 
-export const inject = ['webServer', 'llm', 'agentDefaultModel']
+// tools / attachments 是解说的硬依赖：抓帧、把图交给宿主、再交给模型。
+// llm / agentDefaultModel 给实时解说和赛后 AI 锐评用；解说不创建会话。
+export const inject = ['webServer', 'llm', 'agentDefaultModel', 'tools', 'attachments']
 
 export {
   buildChampSelect,
@@ -905,10 +918,441 @@ export {
   localDateKey,
 }
 
-export function apply(ctx) {
+export async function apply(ctx) {
   pluginCtx = ctx
   loadHistory()
+
+  // 海克斯选卡识别：开关存盘、英雄 id 现取、认出来推给覆盖层
+  // comments 服务在下面才创建，这里先用一个引用占位，避免 TDZ 报错
+  let commentRef = null
+  const hexscan = obtainHexScanService({
+    root: ROOT,
+    dshHome: process.env.DSH_HOME || join(homedir(), '.dsh'),
+    getChampionId: async () => {
+      const live = await buildInGame()
+      const me = live?.allies?.find((row) => row.isSelf)
+      return me?.championId || 0
+    },
+    isActive: async () => {
+      // 用 LCU 的对局阶段判断，别用局内缓存：缓存会在一局结束后还留着，
+      // 让服务以为还在局内、一直抓屏
+      return (await getGameflowPhase()) === 'InProgress'
+    },
+    webBase: process.env.DSH_WEB_URL || '',
+    /** 覆盖层要的"局外信息"：英雄、出装流派、赛后锐评能不能点 */
+    getOverlayInfo: async () => {
+      const phase = (await getGameflowPhase().catch(() => null)) || null
+      // 新的一局开始（从大厅/结算进入选人或局内）就把上一局的解说清空，
+      // 免得评论区越留越多、还混着上一局的评论
+      if ((phase === 'ChampSelect' || phase === 'InProgress')
+        && lastOverlayPhase && lastOverlayPhase !== 'ChampSelect' && lastOverlayPhase !== 'InProgress') {
+        commentRef?.clear()
+      }
+      lastOverlayPhase = phase
+      let champion = null
+      let archetypes = []
+      {
+        // 局内取 Live 数据；选人阶段取选人会话——出装这两个阶段都该能看
+        let championId = 0
+        let championName = ''
+        if (phase === 'InProgress') {
+          const live = await buildInGame().catch(() => null)
+          const me = live?.allies?.find((row) => row.isSelf)
+          championId = Number(me?.championId) || 0
+          championName = me?.champion?.name || ''
+        } else if (phase && CHAMP_SELECT_PHASES.has(phase)) {
+          championId = Number(lastChampSelect?.currentChampionId) || 0
+        }
+        if (championId) {
+          champion = { id: championId, name: championName }
+          // 出装是网络数据，按英雄缓存 10 分钟，别每 2 秒拉一次
+          const cached = overlayBuildCache.get(championId)
+          let payload = cached && Date.now() - cached.at < 10 * 60 * 1000 ? cached.value : null
+          if (!payload) {
+            payload = await buildChampionPayload(championId, 'all').catch(() => null)
+            if (payload) overlayBuildCache.set(championId, { at: Date.now(), value: payload })
+          }
+          archetypes = (payload?.archetypes || []).slice(0, 4).map((row) => {
+            const build = row.builds?.[0] || {}
+            const pack = (items) => (items || []).map((it) => ({ name: it?.name || '', icon: it?.icon || '' })).filter((it) => it.name)
+            return {
+              label: row.label || '',
+              winRate: row.winRate ?? null,
+              starter: pack(build.starters?.[0]?.items),
+              core: pack(build.items),
+              boots: build.boots?.[0]?.item
+                ? { name: build.boots[0].item.name, icon: build.boots[0].item.icon }
+                : null,
+              later: pack((build.later || []).map((l) => l.item)),
+            }
+          }).filter((row) => row.core.length)
+        }
+      }
+      const gameId = lastPostgame?.gameId ? String(lastPostgame.gameId) : ''
+      const entry = gameId ? (loadHistory().entries || []).find((row) => String(row.gameId) === gameId) : null
+      return {
+        phase,
+        champion,
+        archetypes,
+        review: {
+          ready: Boolean(gameId && lastPostgame?.augmentsReady),
+          gameId,
+          status: entry?.reviewStatus || 'idle',
+        },
+        // 覆盖层要在游戏里显示最新一句解说
+        comment: commentRef ? (commentRef.snapshot().comments.slice(-1)[0] || null) : null,
+      }
+    },
+    log: (msg) => console.log(`[aramkit-live] ${msg}`),
+  })
+  hexscan.restore()
+  ctx.effect(() => () => { hexscan.dispose() })
+
+  const comments = createCommentsService({
+    dshHome: process.env.DSH_HOME || join(homedir(), '.dsh'),
+  })
+  commentRef = comments
+
+  // ── 自动解说：插件起钟，每隔 45–90 秒叫一次；模型看图后把 say 写进覆盖层 ──
+  // 模型不会「到点自己再调一次」——它不知道下一次该什么时候调。钟必须在插件里。
+  const COMMENT_WAKE_MIN_MS = 45_000
+  const COMMENT_WAKE_MAX_MS = 90_000
+  const COMMENT_UNACKED_MS = 40_000
+  const COMMENT_MAX_UNACKED = 3
+  const nextCommentGap = () => Math.round(
+    COMMENT_WAKE_MIN_MS + Math.random() * (COMMENT_WAKE_MAX_MS - COMMENT_WAKE_MIN_MS),
+  )
+
+  let lastSessionId = null
+  let lastCallerSessionId = null
+  let commentaryDisposed = false
+  let commentaryBusy = false
+  const commentary = {
+    lastWakeAt: 0,
+    pendingAt: 0,
+    wakesSinceComment: 0,
+    gapMs: nextCommentGap(),
+  }
+
+  function serviceOf(name) {
+    try {
+      if (typeof ctx.get === 'function') {
+        const value = ctx.get(name)
+        if (value) return value
+      }
+    } catch { /* 没 inject 时 get 陷阱会直接抛 */ }
+    try { return ctx[name] ?? null } catch { return null }
+  }
+
+  function sessionIdOf(session) {
+    const id = session?.header?.id ?? session?.id ?? null
+    if (!id) return null
+    const depth = session?.header?.delegationDepth
+    // 子会话（subagent）没有给用户看的窗口，把叫醒投过去等于投进黑洞
+    if (typeof depth === 'number' && depth > 0) return null
+    return id
+  }
+
+  /**
+   * 前台窗口探针：自动叫醒和 `aram_peek` 共用。
+   * 只有前台是英雄联盟时才允许抓帧/叫醒，具体语义见 game-window.js。
+   */
+  const gameWindow = createGameWindowProbe()
+
+  /**
+   * 直接生成一句解说：抓帧 → 交附件 → 直接用宿主 LLM 看图。
+   *
+   * 这是“不发起会话”的关键路径。之前以为 `ctx.llm.stream` 不认图片，实际
+   * DSH 的 content part 是 `{ type:'image', attachment: ref }`（附件引用），
+   * 不是 base64。用附件引用就能直接把画面交给模型，不需要唤醒任何会话。
+   */
+  async function directComment() {
+    if (!ctx.llm || !ctx.agentDefaultModel) throw new Error('当前 DSH 缺少 LLM 服务')
+    const attachments = serviceOf('attachments')
+    if (!attachments?.saveImage) throw new Error('当前 DSH 缺少 attachments 服务')
+    const png = await grabFramePng()
+    const ref = await attachments.saveImage.call(attachments, {
+      data: png,
+      mediaType: 'image/png',
+      name: `aram-comment-${Date.now()}.png`,
+    })
+    const info = await describeGame().catch(() => ({}))
+    const champion = info?.champion || ''
+    const minutes = Number(info?.gameTime) > 0 ? Math.floor(Number(info.gameTime) / 60) : null
+    const selection = ctx.agentDefaultModel.currentSelection()
+
+    // 每次抽一个情绪落点和一个口癖，避免十条都是同一种“解说腔”
+    const moods = [
+      '先挑刺，再落到关心',
+      '嘴硬护短，他被抓时先站他这边',
+      '有点小吃醋，嫌他眼里只有游戏',
+      '心疼他累了，催他注意手/坐姿/喝水',
+      '日常联想：外卖、加班、几点睡、明天',
+      '夸他一句，但马上补一句损',
+      '撒娇，想让他早点打完陪自己',
+      '假装不耐烦，其实一直在看',
+    ]
+    const tics = ['啧', '哎', '你看你', '真是的', '行吧', '我跟你讲', '笨死了', '嗯？']
+    const mood = moods[Math.floor(Math.random() * moods.length)]
+    const tic = tics[Math.floor(Math.random() * tics.length)]
+
+    // 最近说过的话：给模型一个“别重复”的锚，不需要会话历史
+    let recent = '（还没开口）'
+    try {
+      const rows = comments.snapshot().comments.slice(-3).map((row) => row.text).filter(Boolean)
+      if (rows.length) recent = rows.join('；').slice(0, 180)
+    } catch { /* 取不到就不给历史 */ }
+
+    const system = [
+      '你是林小满，23 岁，做平面设计的普通女生，是他的女朋友。',
+      '你不是 AI 助手，也不是游戏解说员。你就坐在他旁边/语音里，陪他打这一把。',
+      '',
+      '说话方式（必须像她，不要像助手）：',
+      '- 先像女朋友一样反应，再顺带看一眼游戏；游戏只是背景，人才是重点。',
+      '- 嘴有点硬、爱挑刺，但永远站他这边；关心先损一句，再落到照顾。',
+      '- 可以有口癖，但一条最多 1–2 个，不要每句都塞。',
+      '- 用“你”称呼他；偶尔可以叫笨蛋，但不要每句都叫。',
+      '- 15–40 个汉字，短句、口语、有情绪，不要书面语。',
+      '- 不总结、不分析、不建议、不播报数据；不要提“画面/截图/AI/模型”。',
+      '- 不要每句都夸，也不要重复最近说过的话。',
+      '- 画面里有明显的事（被抓、残血、空技能、击杀）可以拿来开玩笑或关心；',
+      '  没有就关心他的人：手冷、坐姿、累不累、吃饭、几点睡。',
+      '- 必须说一句，哪怕只是关心他；不要输出空字符串。',
+      '',
+      '你的完整人设（必须遵守）：',
+      comments.persona,
+      '',
+      '最近说过的话（不要重复）：',
+      recent,
+      '',
+      `这一条的落点：${mood}。可以带一个口癖：${tic}。`,
+      '只输出这一句，不要引号、不要解释。',
+    ].join('\n')
+    const content = [
+      {
+        type: 'text',
+        text: `现在是第 ${minutes ?? '?'} 分钟${champion ? `，他玩的是${champion}` : ''}。你看他一眼，说一句。`,
+      },
+      { type: 'image', attachment: ref },
+    ]
+    let text = ''
+    let failure = null
+    for await (const chunk of ctx.llm.stream({
+      provider: selection.provider,
+      model: selection.model,
+      reasoningEffort: selection.reasoningEffort,
+      system,
+      messages: [{ role: 'user', content }],
+      temperature: 1.05,
+      maxTokens: 400,
+    })) {
+      if (chunk.type === 'text-delta') text += chunk.text
+      if (chunk.type === 'finish' && (chunk.reason?.kind === 'error' || chunk.reason?.kind === 'aborted')) {
+        failure = chunk.reason.failure?.message || '模型调用失败'
+      }
+    }
+    if (failure) throw new Error(failure)
+    return String(text || '').replace(/\s+/g, ' ').trim().replace(/^["「『]|["」』]$/g, '')
+  }
+
+  async function commentaryTick() {
+    if (commentaryDisposed || commentaryBusy || !comments.enabled) return
+    const now = Date.now()
+
+    // 有新解说 = 模型回应过：重置「一直没回」的计数
+    if (comments.lastAt > commentary.lastWakeAt) {
+      commentary.wakesSinceComment = 0
+      commentary.pendingAt = 0
+    }
+    if (now - commentary.lastWakeAt < commentary.gapMs) return
+    if (comments.lastAt && now - comments.lastAt < 25_000) return
+    if (commentary.pendingAt && now - commentary.pendingAt < COMMENT_UNACKED_MS) return
+    if (commentary.wakesSinceComment >= COMMENT_MAX_UNACKED) return
+
+    const phase = await getGameflowPhase().catch(() => null)
+    if (phase !== 'InProgress') {
+      // 离开对局就清零：下一局重新允许叫醒，别被上一局的「没回」次数卡死
+      commentary.wakesSinceComment = 0
+      commentary.pendingAt = 0
+      return
+    }
+
+    // 游戏窗口不可见/最小化时抓到的会是桌面/聊天窗，别叫模型去解说一张桌面
+    const foreground = await gameWindow.isGameForeground()
+    if (foreground === false) {
+      commentary.lastWakeAt = now
+      return
+    }
+
+    // 解说开着、游戏在前台：覆盖层必须真的在跑。
+    // 切到聊天窗会让插件页卸载并杀覆盖层，这里不依赖面板页面，自己补起来。
+    try { hexscan.showOverlay?.() } catch { /* 老版本没有这个方法就跳过 */ }
+
+    // 直接看图：不起会话、不发 user 消息，输出只进覆盖层
+    commentaryBusy = true
+    commentary.lastWakeAt = now
+    // 每次真正投递前抽下一段的间隔：45–90 秒随机，避免像节拍器一样机械
+    commentary.gapMs = nextCommentGap()
+    try {
+      const text = await directComment()
+      if (text) {
+        comments.add(text, { kind: 'direct' })
+        commentary.wakesSinceComment = 0
+        commentary.pendingAt = 0
+      }
+    } catch (error) {
+      console.log(`[aramkit-live] 解说失败：${error?.message || error}`)
+    } finally {
+      commentaryBusy = false
+    }
+  }
+
+  async function grabFramePng() {
+    const out = join(ROOT, '.cache', `peek-${process.pid}-${Date.now()}.png`)
+    mkdirSync(dirname(out), { recursive: true })
+    try {
+      await new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, [join(ROOT, 'tools', 'hexscan.mjs'), 'grab', '--out', out],
+          { stdio: 'ignore', windowsHide: true })
+        const timer = setTimeout(() => {
+          try { child.kill() } catch { /* 已退出 */ }
+          reject(new Error('抓帧超时'))
+        }, 20000)
+        child.once('error', (e) => { clearTimeout(timer); reject(e) })
+        child.once('exit', (code) => {
+          clearTimeout(timer)
+          code === 0 ? resolve() : reject(new Error(`抓帧退出码 ${code}`))
+        })
+      })
+      return readFileSync(out)
+    } finally {
+      rmSync(out, { force: true })
+    }
+  }
+
+  async function describeGame() {
+    const phase = (await getGameflowPhase().catch(() => null)) || null
+    let champion = ''
+    let gameTime = 0
+    if (phase === 'InProgress') {
+      const live = await buildInGame().catch(() => null)
+      const me = live?.allies?.find((row) => row.isSelf)
+      champion = me?.champion?.name || ''
+      gameTime = Number(live?.gameTime) || 0
+    }
+    return { phase, champion, gameTime }
+  }
+
+  try {
+    const peekTool = await createAramPeekTool({
+      ctx,
+      comments,
+      grabFrame: grabFramePng,
+      getContext: describeGame,
+      // 硬门禁：先认 LCU 的阶段（游戏前/游戏内/游戏后），再认游戏窗口是否可见。
+      // `InProgress` 只说明这局在跑，不说明画面现在是游戏；两道都过才抓。
+      canCapture: async () => {
+        const phase = await getGameflowPhase().catch(() => null)
+        if (phase !== 'InProgress') return false
+        return gameWindow.isGameForeground()
+      },
+      onInvoke: ({ sessionId }) => {
+        if (sessionId) lastCallerSessionId = sessionId
+        // 模型已经接住这次叫醒：不用再等满 100 秒才叫下一声
+        commentary.pendingAt = 0
+      },
+      log: (msg) => console.log(`[aramkit-live] ${msg}`),
+    })
+    // 注册挂在 effect 上：插件禁用时把工具一起撤掉
+    ctx.effect(() => ctx.tools.register(peekTool), 'aramkit-live: aram_peek')
+  } catch (error) {
+    const message = String(error?.message || error)
+    // 同一个 profile 里装了两份时只保留先注册的那份，别让整个插件挂掉
+    if (!/already registered/i.test(message)) {
+      console.log(`[aramkit-live] aram_peek 注册失败：${message}`)
+    }
+  }
+
+  // 记「最后活动的会话」：用户只要在这个会话里说过话，就能作为叫醒目标兜底。
+  // 真正的归属优先用 aram_peek 调用带的 agent（lastCallerSessionId）。
+  ctx.effect(() => {
+    if (typeof ctx.on !== 'function') return () => {}
+    let off = null
+    try {
+      off = ctx.on('session/event', (session) => {
+        const id = sessionIdOf(session)
+        if (id) lastSessionId = id
+      })
+    } catch (error) {
+      console.log(`[aramkit-live] session/event 钩子失败：${error?.message || error}`)
+    }
+    return () => { try { off?.() } catch { /* 卸载时收不干净也不能再炸 */ } }
+  })
+
+  // 钟挂在 ctx.effect 上：插件禁用就停，免得拿着失效的 ctx 继续跑。
+  ctx.effect(() => {
+    const timer = setInterval(() => { void commentaryTick() }, 5000)
+    if (typeof timer.unref === 'function') timer.unref()
+    return () => {
+      commentaryDisposed = true
+      clearInterval(timer)
+    }
+  })
+
   const routes = [
+    [
+      '/aramkit-live/comments',
+      route(async (url, body) => {
+        if (body && Object.prototype.hasOwnProperty.call(body, 'enabled')) {
+          return comments.setEnabled(body.enabled === true)
+        }
+        if (body && Object.prototype.hasOwnProperty.call(body, 'persona')) {
+          return comments.setPersona(body.persona)
+        }
+        if (body && body.clear === true) return comments.clear()
+        if (body && typeof body.text === 'string') {
+          comments.add(body.text, { kind: 'manual' })
+          return comments.snapshot()
+        }
+        return comments.snapshot()
+      }),
+    ],
+    [
+      '/aramkit-live/test-direct-comment',
+      route(async () => {
+        try {
+          const text = await directComment()
+          return { ok: true, text }
+        } catch (error) {
+          return { ok: false, error: String(error?.message || error).slice(0, 500) }
+        }
+      }),
+    ],
+    [
+      '/aramkit-live/commentary-status',
+      route(async () => ({
+        ok: true,
+        enabled: comments.enabled,
+        phase: (await getGameflowPhase().catch(() => null)) || null,
+        foreground: await gameWindow.isGameForeground().catch(() => null),
+        lastSessionId,
+        lastCallerSessionId,
+        commentary: { ...commentary },
+        overlay: hexscan.snapshot(),
+      })),
+    ],
+    [
+      '/aramkit-live/hexscan',
+      route(async (url, body) => {
+        if (body && Object.prototype.hasOwnProperty.call(body, 'visible')) {
+          return hexscan.setVisible(body.visible === true, Number(body.visibleAt) || Date.now())
+        }
+        if (body && Object.prototype.hasOwnProperty.call(body, 'enabled')) {
+          return hexscan.setEnabled(body.enabled === true, body.webBase)
+        }
+        return hexscan.snapshot()
+      }),
+    ],
     [
       '/aramkit-live/connect',
       route(async (url) => {
