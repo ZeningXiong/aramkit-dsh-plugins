@@ -8,6 +8,9 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 const MAX_COMMENTS = 200
+const DEFAULT_DISPLAY_MS = 10_000
+const MIN_DISPLAY_MS = 3_000
+const MAX_DISPLAY_MS = 30_000
 export const DEFAULT_PERSONA = '温柔的女朋友陪玩：说话软、爱夸人、会维护你，输了也先安慰，偶尔小撒娇，短句口语，绝不毒舌。'
 /** 老版本存下来的默认值：读到就迁移成新的，免得用户一直用旧人格 */
 const LEGACY_PERSONA = '毒舌但好笑的老队友：短句、口语、只看画面里发生的事，不编造数据，不说教。'
@@ -35,6 +38,8 @@ export function createCommentsService({ dshHome }) {
       : DEFAULT_PERSONA,
     comments: Array.isArray(saved.comments) ? saved.comments.slice(-MAX_COMMENTS) : [],
     lastAt: saved.lastAt || 0,
+    displayMs: Math.max(MIN_DISPLAY_MS, Math.min(MAX_DISPLAY_MS,
+      Number(saved.displayMs) || DEFAULT_DISPLAY_MS)),
   }
 
   function save() {
@@ -43,6 +48,7 @@ export function createCommentsService({ dshHome }) {
       persona: state.persona,
       comments: state.comments.slice(-MAX_COMMENTS),
       lastAt: state.lastAt,
+      displayMs: state.displayMs,
     })
   }
 
@@ -52,6 +58,7 @@ export function createCommentsService({ dshHome }) {
         ok: true,
         enabled: state.enabled,
         persona: state.persona,
+        displayMs: state.displayMs,
         comments: state.comments.slice(-60),
       }
     },
@@ -63,6 +70,13 @@ export function createCommentsService({ dshHome }) {
     setPersona(persona) {
       const text = String(persona || '').trim()
       state.persona = text || DEFAULT_PERSONA
+      save()
+      return this.snapshot()
+    },
+    setDisplayMs(ms) {
+      const value = Number(ms)
+      state.displayMs = Math.max(MIN_DISPLAY_MS, Math.min(MAX_DISPLAY_MS,
+        Number.isFinite(value) && value > 0 ? value : DEFAULT_DISPLAY_MS))
       save()
       return this.snapshot()
     },
@@ -89,5 +103,6 @@ export function createCommentsService({ dshHome }) {
     get enabled() { return state.enabled },
     get persona() { return state.persona },
     get lastAt() { return state.lastAt },
+    get displayMs() { return state.displayMs },
   }
 }

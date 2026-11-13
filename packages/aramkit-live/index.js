@@ -1001,6 +1001,7 @@ export async function apply(ctx) {
         },
         // 覆盖层要在游戏里显示最新一句解说
         comment: commentRef ? (commentRef.snapshot().comments.slice(-1)[0] || null) : null,
+        commentMs: commentRef?.displayMs || 10_000,
       }
     },
     log: (msg) => console.log(`[aramkit-live] ${msg}`),
@@ -1013,10 +1014,10 @@ export async function apply(ctx) {
   })
   commentRef = comments
 
-  // ── 自动解说：插件起钟，每隔 45–90 秒叫一次；模型看图后把 say 写进覆盖层 ──
+  // ── 自动解说：插件起钟，普通节拍 3–4 分钟；高光事件另外即时插话 ──
   // 模型不会「到点自己再调一次」——它不知道下一次该什么时候调。钟必须在插件里。
-  const COMMENT_WAKE_MIN_MS = 45_000
-  const COMMENT_WAKE_MAX_MS = 90_000
+  const COMMENT_WAKE_MIN_MS = 180_000
+  const COMMENT_WAKE_MAX_MS = 240_000
   const COMMENT_UNACKED_MS = 40_000
   const COMMENT_MAX_UNACKED = 3
   const nextCommentGap = () => Math.round(
@@ -1032,6 +1033,14 @@ export async function apply(ctx) {
     pendingAt: 0,
     wakesSinceComment: 0,
     gapMs: nextCommentGap(),
+    // 局内高光事件：多杀 / 一血 / 团灭 / 击杀里程碑
+    lastHighlightAt: 0,
+    eventCursor: null,
+    selfKills: 0,
+    lastGameTime: 0,
+    recentKillTimes: [],
+    // 3 条游戏 + 1 条女友型，循环计数
+    segmentCount: 0,
   }
 
   function serviceOf(name) {
@@ -1066,58 +1075,97 @@ export async function apply(ctx) {
    * DSH 的 content part 是 `{ type:'image', attachment: ref }`（附件引用），
    * 不是 base64。用附件引用就能直接把画面交给模型，不需要唤醒任何会话。
    */
-  async function directComment() {
+  async function directComment({ highlight = '', mode = 'game' } = {}) {
     if (!ctx.llm || !ctx.agentDefaultModel) throw new Error('当前 DSH 缺少 LLM 服务')
     const attachments = serviceOf('attachments')
     if (!attachments?.saveImage) throw new Error('当前 DSH 缺少 attachments 服务')
-    const png = await grabFramePng()
-    const ref = await attachments.saveImage.call(attachments, {
-      data: png,
-      mediaType: 'image/png',
-      name: `aram-comment-${Date.now()}.png`,
-    })
-    const info = await describeGame().catch(() => ({}))
+    // 关心那一拍不需要看图：省一次抓屏和 1024 个图片 token
+    let ref = null
+    if (mode !== 'care') {
+      const png = await grabFramePng()
+      ref = await attachments.saveImage.call(attachments, {
+        data: png,
+        mediaType: 'image/png',
+        name: `aram-comment-${Date.now()}.png`,
+      })
+    }
+    const info = mode === 'care' ? {} : await describeGame().catch(() => ({}))
     const champion = info?.champion || ''
     const minutes = Number(info?.gameTime) > 0 ? Math.floor(Number(info.gameTime) / 60) : null
     const selection = ctx.agentDefaultModel.currentSelection()
 
     // 每次抽一个情绪落点和一个口癖，避免十条都是同一种“解说腔”
-    const moods = [
+    const gameMoods = [
       '先挑刺，再落到关心',
-      '嘴硬护短，他被抓时先站他这边',
-      '有点小吃醋，嫌他眼里只有游戏',
-      '心疼他累了，催他注意手/坐姿/喝水',
-      '日常联想：外卖、加班、几点睡、明天',
+      '嘴硬护短，他被开/被集火时先站他这边',
       '夸他一句，但马上补一句损',
-      '撒娇，想让他早点打完陪自己',
       '假装不耐烦，其实一直在看',
     ]
+    const careMoods = [
+      '有点小吃醋，嫌他眼里只有游戏',
+      '心疼他累了，催他休息/喝水',
+      '日常联想：外卖、加班、几点睡、明天',
+      '撒娇，想让他早点打完陪自己',
+      '嘴硬关心：先损一句，再问他饿不饿',
+      '夸他今天状态不错，但嘴上不承认',
+    ]
+    const moods = mode === 'care' ? careMoods : gameMoods
     const tics = ['啧', '哎', '你看你', '真是的', '行吧', '我跟你讲', '笨死了', '嗯？']
     const mood = moods[Math.floor(Math.random() * moods.length)]
     const tic = tics[Math.floor(Math.random() * tics.length)]
+    // 关心段每次只聊一个具体落点，避免模型翻来覆去问“手僵不僵”
+    const careTopics = [
+      '他饿不饿、有没有好好吃饭',
+      '几点睡、是不是又熬夜',
+      '坐姿/腰背，别一直窝着',
+      '眼睛盯屏幕太久，眨一眨',
+      '今天心情怎么样、输了也别闷着',
+      '想让他早点打完陪自己',
+      '他今天有没有被队友气到',
+      '夸他一句今天声音/状态不错',
+    ]
+    const careTopic = careTopics[Math.floor(Math.random() * careTopics.length)]
 
     // 最近说过的话：给模型一个“别重复”的锚，不需要会话历史
     let recent = '（还没开口）'
+    let careHistory = '（还没有）'
     try {
-      const rows = comments.snapshot().comments.slice(-3).map((row) => row.text).filter(Boolean)
-      if (rows.length) recent = rows.join('；').slice(0, 180)
+      const rows = comments.snapshot().comments || []
+      const recentRows = rows.slice(-6).map((row) => row.text).filter(Boolean)
+      if (recentRows.length) recent = recentRows.join('；').slice(0, 260)
+      const careRows = rows.filter((row) => row.kind === 'care').slice(-2).map((row) => row.text).filter(Boolean)
+      if (careRows.length) careHistory = careRows.join('；').slice(0, 160)
     } catch { /* 取不到就不给历史 */ }
 
     const system = [
       '你是林小满，23 岁，做平面设计的普通女生，是他的女朋友。',
       '你不是 AI 助手，也不是游戏解说员。你就坐在他旁边/语音里，陪他打这一把。',
       '',
+      '【游戏模式，必须记住】',
+      '这是《英雄联盟》海克斯大乱斗（ARAM Mayhem），不是召唤师峡谷：',
+      '- 5v5 单线混战，没有分路、没有打野；不要提打野抓人、反野、分带、小龙/先锋/龙魂。',
+      '- 不能主动回城，买装备只能等阵亡复活；不要说“回家买装备/回城”。',
+      '- 海克斯强化在开局和 7 / 11 / 15 级阵亡后选择；地图有传送门、治疗包、中央舞台。',
+      '- 右上角显示的是本局游戏时长（例如 12:34），不是现实时间；不要读成现在几点。',
+      '- 只有收到明确的「双杀/三杀/四杀/五杀」提示时才说多杀；没有提示不要自己编。',
+      '- 只根据画面里真实可见的内容说话；看不清就不编。',
+      '',
       '说话方式（必须像她，不要像助手）：',
       '- 先像女朋友一样反应，再顺带看一眼游戏；游戏只是背景，人才是重点。',
       '- 嘴有点硬、爱挑刺，但永远站他这边；关心先损一句，再落到照顾。',
       '- 可以有口癖，但一条最多 1–2 个，不要每句都塞。',
       '- 用“你”称呼他；偶尔可以叫笨蛋，但不要每句都叫。',
-      '- 15–40 个汉字，短句、口语、有情绪，不要书面语。',
-      '- 不总结、不分析、不建议、不播报数据；不要提“画面/截图/AI/模型”。',
-      '- 不要每句都夸，也不要重复最近说过的话。',
-      '- 画面里有明显的事（被抓、残血、空技能、击杀）可以拿来开玩笑或关心；',
-      '  没有就关心他的人：手冷、坐姿、累不累、吃饭、几点睡。',
-      '- 必须说一句，哪怕只是关心他；不要输出空字符串。',
+      mode === 'care'
+        ? '- 只输出 1 条短消息，8–25 个汉字；这一条不聊游戏、不提画面，只聊他这个人。'
+        : '- 只输出 1 条短消息，10–30 个汉字；内容以这一帧的游戏为主，具体但不播报数据。',
+      mode === 'care'
+        ? `- 这一条只聊一个落点：${careTopic}；不要换话题，不要问手僵/手冷/手酸。`
+        : '- 可以吐槽这一波操作、站位、技能、装备或海克斯，但别总结整局。',
+      '- 不要用序号、项目符号、引号；不要总结、不分析、不建议、不播报数据。',
+      '- 不要每句都夸，也不要重复最近说过的话；关心不要每次都写成问句。',
+      '- 画面里有明显的事（被开、被集火、残血、空技能、击杀）可以拿来开玩笑或关心；',
+      '  没有就关心他的人：吃饭、睡觉、坐姿、心情、陪她，别老是问手。',
+      '- 必须说，哪怕只是关心他；不要输出空字符串。',
       '',
       '你的完整人设（必须遵守）：',
       comments.persona,
@@ -1125,16 +1173,21 @@ export async function apply(ctx) {
       '最近说过的话（不要重复）：',
       recent,
       '',
+      `前两次关心说过（这次必须换一个落点，不要再问手）：${careHistory}`,
+      '',
       `这一条的落点：${mood}。可以带一个口癖：${tic}。`,
-      '只输出这一句，不要引号、不要解释。',
-    ].join('\n')
-    const content = [
-      {
-        type: 'text',
-        text: `现在是第 ${minutes ?? '?'} 分钟${champion ? `，他玩的是${champion}` : ''}。你看他一眼，说一句。`,
-      },
-      { type: 'image', attachment: ref },
-    ]
+      highlight
+        ? `刚刚发生了「${highlight}」，这条先对这个亮点做出反应（惊讶/夸/损），再顺一句人话。`
+        : '',
+      '只输出这 1 条短消息，不要引号、不要解释。',
+    ].filter(Boolean).join('\n')
+    const content = [{
+      type: 'text',
+      text: mode === 'care'
+        ? '你看他一眼，说一句关心他的话。'
+        : `现在是第 ${minutes ?? '?'} 分钟${champion ? `，他玩的是${champion}` : ''}。你看他一眼，说一句。`,
+    }]
+    if (ref) content.push({ type: 'image', attachment: ref })
     let text = ''
     let failure = null
     for await (const chunk of ctx.llm.stream({
@@ -1144,7 +1197,7 @@ export async function apply(ctx) {
       system,
       messages: [{ role: 'user', content }],
       temperature: 1.05,
-      maxTokens: 400,
+      maxTokens: 500,
     })) {
       if (chunk.type === 'text-delta') text += chunk.text
       if (chunk.type === 'finish' && (chunk.reason?.kind === 'error' || chunk.reason?.kind === 'aborted')) {
@@ -1152,28 +1205,164 @@ export async function apply(ctx) {
       }
     }
     if (failure) throw new Error(failure)
-    return String(text || '').replace(/\s+/g, ' ').trim().replace(/^["「『]|["」』]$/g, '')
+    // 保留换行：覆盖层按“多条聊天气泡”渲染。顺手去掉序号/项目符号/引号。
+    return String(text || '')
+      .replace(/\r/g, '')
+      .split('\n')
+      .map((line) => line
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/^[-*•]\s*|^\d+[.)、]\s*/, '')
+        .replace(/^["「『]|["」』]$/g, '')
+        .trim())
+      .filter(Boolean)
+      .slice(0, 1)
+      .join('\n')
+  }
+
+  /**
+   * 从 Live Client 的 events/scores 里找“值得立刻说一句”的高光：
+   * 双杀/三杀/四杀/五杀、一血、团灭、5/10/15 杀里程碑。
+   *
+   * 注意：Live Client API 不提供“对英雄伤害”字段，所以“高额伤害”只能用
+   * 连杀/击杀里程碑做代理，不能编具体伤害数字。
+   */
+  async function detectHighlight() {
+    const live = await getLiveGameData().catch(() => null)
+    const events = live?.events?.Events
+    if (!live || !Array.isArray(events) || !events.length) return null
+    const selfName = live.activePlayer?.summonerName
+      || live.activePlayer?.riotIdGameName
+      || ''
+    const allPlayers = Array.isArray(live.allPlayers) ? live.allPlayers : []
+    const self = allPlayers.find((row) => row.summonerName === selfName) || null
+    const selfTeam = self?.team || ''
+    const gameTime = Number(live.gameData?.gameTime) || 0
+    const kills = Number(self?.scores?.kills) || 0
+
+    // 新的一局：时间倒回去了，重置游标，避免把上一局的旧事件再播一遍
+    if (gameTime + 5 < commentary.lastGameTime) {
+      commentary.eventCursor = null
+      commentary.selfKills = 0
+      commentary.recentKillTimes = []
+    }
+    commentary.lastGameTime = gameTime
+
+    const maxId = events.reduce((max, event) => Math.max(max, Number(event?.EventID) || 0), 0)
+    if (commentary.eventCursor === null) {
+      // 插件中途启动：先把当前事件全部吞掉，只从下一条新事件开始
+      commentary.eventCursor = maxId
+      commentary.selfKills = kills
+      return null
+    }
+
+    const fresh = events.filter((event) => {
+      const id = Number(event?.EventID) || 0
+      return id > commentary.eventCursor && id <= maxId
+    })
+    commentary.eventCursor = maxId
+
+    const norm = (value) => String(value || '').split('#')[0].trim().toLowerCase()
+    const streakLabel = (streak) => {
+      if (streak >= 5) return '五杀'
+      if (streak === 4) return '四杀'
+      if (streak === 3) return '三杀'
+      if (streak === 2) return '双杀'
+      return ''
+    }
+    let best = ''
+    let bestRank = 0
+    const consider = (label, rank = 1) => {
+      if (label && rank > bestRank) {
+        best = label
+        bestRank = rank
+      }
+    }
+
+    for (const event of fresh) {
+      const name = event?.EventName
+      const killer = norm(event?.KillerName)
+      const bySelf = selfName && killer === norm(selfName)
+      if (name === 'ChampionKill' && bySelf) {
+        // 不直接用 KillStreak：那是“连续不死击杀”，不一定是多杀。
+        // 按 EventTime 把 12 秒内的连续击杀归成一组，才叫双杀/三杀。
+        const at = Number(event?.EventTime) || gameTime
+        const recent = (commentary.recentKillTimes || []).filter((t) => at - t <= 12)
+        recent.push(at)
+        commentary.recentKillTimes = recent
+        const label = streakLabel(recent.length)
+        if (label) consider(label, recent.length)
+      } else if (name === 'FirstBlood' && bySelf) {
+        consider('一血', 1)
+      } else if (name === 'Ace') {
+        const acingTeam = String(event?.AcingTeam || '')
+        if (!acingTeam || !selfTeam || acingTeam === selfTeam) consider('团灭对面', 2)
+      }
+    }
+
+    // Live API 没有伤害字段；5/10/15 杀里程碑当“打出高额伤害”的代理
+    if (!best && kills > commentary.selfKills && kills >= 5 && kills % 5 === 0) {
+      best = `${kills} 杀`
+    }
+    commentary.selfKills = kills
+    if (best) console.log(`[aramkit-live] 高光事件：${best}（self kills=${kills}）`)
+    return best || null
+  }
+
+  async function emitComment(highlight = '') {
+    commentaryBusy = true
+    commentary.lastWakeAt = Date.now()
+    // 每 4 段一个循环：前 3 段聊游戏，第 4 段只关心/撒娇。
+    const careDue = commentary.segmentCount % 4 === 3
+    const care = !highlight && careDue
+    // 每次真正投递前抽下一段的间隔：3–4 分钟随机，避免像节拍器一样机械
+    commentary.gapMs = nextCommentGap()
+    try {
+      const text = await directComment({ highlight, mode: care ? 'care' : 'game' })
+      if (text) {
+        comments.add(text, { kind: care ? 'care' : highlight ? 'highlight' : 'direct' })
+        // 高光插在“该关心”的位置时，不占掉这次关心名额，下一段仍然是女友型
+        if (!(highlight && careDue)) commentary.segmentCount += 1
+        commentary.wakesSinceComment = 0
+        commentary.pendingAt = 0
+        return true
+      }
+      return false
+    } catch (error) {
+      console.log(`[aramkit-live] 解说失败：${error?.message || error}`)
+      return false
+    } finally {
+      commentaryBusy = false
+    }
   }
 
   async function commentaryTick() {
     if (commentaryDisposed || commentaryBusy || !comments.enabled) return
     const now = Date.now()
 
+    // 覆盖层只有用户打开「海斗助手在线版」页面后才存在；页面关掉就停止解说，
+    // 不再自动补窗口（用户明确要求：打开界面才显示）。
+    try {
+      if (hexscan.snapshot().visible === false) return
+    } catch { /* 老版本服务没有 visible 字段就照常跑 */ }
+
     // 有新解说 = 模型回应过：重置「一直没回」的计数
     if (comments.lastAt > commentary.lastWakeAt) {
       commentary.wakesSinceComment = 0
       commentary.pendingAt = 0
     }
-    if (now - commentary.lastWakeAt < commentary.gapMs) return
-    if (comments.lastAt && now - comments.lastAt < 25_000) return
-    if (commentary.pendingAt && now - commentary.pendingAt < COMMENT_UNACKED_MS) return
-    if (commentary.wakesSinceComment >= COMMENT_MAX_UNACKED) return
 
     const phase = await getGameflowPhase().catch(() => null)
     if (phase !== 'InProgress') {
       // 离开对局就清零：下一局重新允许叫醒，别被上一局的「没回」次数卡死
       commentary.wakesSinceComment = 0
       commentary.pendingAt = 0
+      commentary.eventCursor = null
+      commentary.selfKills = 0
+      commentary.lastGameTime = 0
+      commentary.lastHighlightAt = 0
+      commentary.recentKillTimes = []
+      commentary.segmentCount = 0
       return
     }
 
@@ -1184,27 +1373,21 @@ export async function apply(ctx) {
       return
     }
 
-    // 解说开着、游戏在前台：覆盖层必须真的在跑。
-    // 切到聊天窗会让插件页卸载并杀覆盖层，这里不依赖面板页面，自己补起来。
-    try { hexscan.showOverlay?.() } catch { /* 老版本没有这个方法就跳过 */ }
-
-    // 直接看图：不起会话、不发 user 消息，输出只进覆盖层
-    commentaryBusy = true
-    commentary.lastWakeAt = now
-    // 每次真正投递前抽下一段的间隔：45–90 秒随机，避免像节拍器一样机械
-    commentary.gapMs = nextCommentGap()
-    try {
-      const text = await directComment()
-      if (text) {
-        comments.add(text, { kind: 'direct' })
-        commentary.wakesSinceComment = 0
-        commentary.pendingAt = 0
-      }
-    } catch (error) {
-      console.log(`[aramkit-live] 解说失败：${error?.message || error}`)
-    } finally {
-      commentaryBusy = false
+    // 先看这一拍有没有高光事件：多杀 / 一血 / 团灭 / 击杀里程碑。
+    // 命中就跳过节拍立刻说一句，冷却 15 秒，避免一次团战连发。
+    const highlight = await detectHighlight().catch(() => null)
+    if (highlight && now - commentary.lastHighlightAt >= 15_000) {
+      commentary.lastHighlightAt = now
+      await emitComment(highlight)
+      return
     }
+
+    // 普通节拍：3–4 分钟随机
+    if (now - commentary.lastWakeAt < commentary.gapMs) return
+    if (comments.lastAt && now - comments.lastAt < 25_000) return
+    if (commentary.pendingAt && now - commentary.pendingAt < COMMENT_UNACKED_MS) return
+    if (commentary.wakesSinceComment >= COMMENT_MAX_UNACKED) return
+    await emitComment('')
   }
 
   async function grabFramePng() {
@@ -1309,6 +1492,9 @@ export async function apply(ctx) {
         if (body && Object.prototype.hasOwnProperty.call(body, 'persona')) {
           return comments.setPersona(body.persona)
         }
+        if (body && Object.prototype.hasOwnProperty.call(body, 'displayMs')) {
+          return comments.setDisplayMs(body.displayMs)
+        }
         if (body && body.clear === true) return comments.clear()
         if (body && typeof body.text === 'string') {
           comments.add(body.text, { kind: 'manual' })
@@ -1344,6 +1530,9 @@ export async function apply(ctx) {
     [
       '/aramkit-live/hexscan',
       route(async (url, body) => {
+        if (body && typeof body.webBase === 'string') {
+          hexscan.setWebBase(body.webBase)
+        }
         if (body && Object.prototype.hasOwnProperty.call(body, 'visible')) {
           return hexscan.setVisible(body.visible === true, Number(body.visibleAt) || Date.now())
         }
@@ -1547,6 +1736,24 @@ export async function apply(ctx) {
       }),
     ],
   ]
+  // 品牌小人：客户端用 <img> 直接引用，不把 base64 塞进 client.js
+  try {
+    const brandFile = join(ROOT, 'assets', 'whale-girl.png')
+    const brandPng = readFileSync(brandFile)
+    ctx.effect(() => ctx.webServer.register({
+      kind: 'exact',
+      path: '/aramkit-live/asset/whale-girl.png',
+      handler: async (request, response) => {
+        response.statusCode = 200
+        response.setHeader('content-type', 'image/png')
+        response.setHeader('cache-control', 'public, max-age=86400')
+        response.setHeader('x-content-type-options', 'nosniff')
+        response.end(brandPng)
+      },
+    }), 'aramkit-live: brand asset')
+  } catch (error) {
+    console.log(`[aramkit-live] 品牌素材没挂上：${error?.message || error}`)
+  }
   for (const [path, handler] of routes) {
     ctx.effect(() => ctx.webServer.register({ kind: 'exact', path, handler }), `aramkit-live: ${path}`)
   }

@@ -29,6 +29,12 @@ function readJson(file, fallback) {
   }
 }
 
+/** 覆盖层只能走 http(s)；`dsh-app://app` 这种自定义 scheme 不能 urllib POST。 */
+function httpBase(value) {
+  const text = String(value || '').trim().replace(/\/+$/, '')
+  return /^https?:\/\//i.test(text) ? text : ''
+}
+
 function writeJson(file, value) {
   mkdirSync(dirname(file), { recursive: true })
   writeFileSync(file, JSON.stringify(value, null, 2))
@@ -74,14 +80,16 @@ export function createHexScanService({ root, dshHome, getChampionId, isActive = 
     enabled: saved.enabled === true,
     // 覆盖层要 POST 锐评，得有 DSH 的地址；宿主进程拿不到端口，
     // 所以由页面在开关时把自己的 origin 报上来
-    webBase: saved.webBase || webBase || '',
+    // 优先用宿主当前注入的 DSH_WEB_URL：保存值可能是上个端口的旧地址
+    webBase: httpBase(webBase) || httpBase(saved.webBase) || '',
     busy: false,
     last: null,
     lastError: '',
     championId: 0,
     lastScanAt: 0,
     session: null,
-    visible: saved.visible !== false,
+    // 不在 DSH 启动时就显示：等插件页挂载后心跳上报 visible:true 再开
+    visible: false,
     visibleAt: 0,
   }
 
@@ -203,6 +211,16 @@ export function createHexScanService({ root, dshHome, getChampionId, isActive = 
     try {
       // 点按钮才会开始一轮识别；没点就什么都不做，不烧 CPU
       const req = readJson(overlayRequest, null)
+      if (req && req.cancel === true) {
+        if (Number(req.seq) > lastRequestSeq) {
+          lastRequestSeq = Number(req.seq)
+          state.session = null
+          state.last = null
+          writeJson(overlayData, { status: 'idle', at: Date.now() })
+          log('hexscan: 用户收起面板，结束这一轮')
+        }
+        return
+      }
       if (req && Number(req.seq) > lastRequestSeq) {
         lastRequestSeq = Number(req.seq)
         state.session = { startedAt: Date.now(), detected: false, miss: 0 }
@@ -271,7 +289,7 @@ export function createHexScanService({ root, dshHome, getChampionId, isActive = 
           const info = await getOverlayInfo()
           writeJson(overlayInfo, {
             ...info,
-            webBase: state.webBase,
+            webBase: state.webBase || httpBase(process.env.DSH_WEB_URL) || '',
             visible: state.visible,
             visibleAt: state.visibleAt,
             at: Date.now(),
@@ -301,6 +319,7 @@ export function createHexScanService({ root, dshHome, getChampionId, isActive = 
         enabled: state.enabled,
         running: Boolean(timer),
         visible: state.visible,
+        webBase: state.webBase,
         overlayPid: overlayChild?.pid ?? null,
         overlayRunning: Boolean(overlayChild && overlayChild.exitCode === null && pidAlive(overlayChild.pid)),
         championId: state.championId,
@@ -356,14 +375,18 @@ export function createHexScanService({ root, dshHome, getChampionId, isActive = 
       ensureOverlay()
       return this.snapshot()
     },
-    /** DSH 启动时恢复上次的开关 */
+    /** 页面心跳带上当前 DSH origin：重启后端口会变，覆盖层的锐评按钮靠它找接口。 */
+    setWebBase(base) {
+      const next = httpBase(base)
+      if (!next || next === state.webBase) return
+      state.webBase = next
+      save()
+    },
+    /** DSH 启动时**不**自动拉起覆盖层：等用户打开「海斗助手在线版」页面，
+     *  页面心跳 `visible:true` 后由 setVisible 显示。 */
     restore() {
-      if (state.enabled) {
-        start()
-        // 页面还没上报过（visibleAt=0）就先按"可见"处理，否则重启后永远不出现；
-        // 页面明确说 false 时才收起来
-        if (state.visible) ensureOverlay()
-      }
+      // 只恢复配置，不启动任何窗口/定时器。
+      // 用户明确要求：不要一开 DSH 就弹悬浮窗，打开在线版界面再显示。
     },
     dispose() {
       stop()
